@@ -16,6 +16,10 @@
 
 import http from "http";
 import https from "https";
+import os from "os";
+import nodePath from "path";
+import { readFileSync, writeFileSync, renameSync } from "fs";
+import { spawn } from "child_process";
 import { Socket } from "net";
 import { randomBytes, timingSafeEqual } from "crypto";
 import {
@@ -316,7 +320,8 @@ button.btn:disabled { opacity: .4; cursor: not-allowed; }
 .btn-ghost:hover:not(:disabled) { background: var(--surface3); border-color: var(--border2); }
 .btn-danger { background: var(--danger); color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #c53030; }
-.btn-success { background: var(--success); color: #000; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #17a86d; }
 .btn-sm { padding: 7px 14px; font-size: 13px; }
 
 .actions { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; align-items: center; }
@@ -711,23 +716,17 @@ button.btn:disabled { opacity: .4; cursor: not-allowed; }
 .review-value { font-size: 14px; color: var(--text); font-weight: 500; margin-top: 2px; }
 
 /* ── Done step ── */
-.done-hero {
-  text-align: center; padding: 16px 0 28px;
-}
-.done-checkmark {
-  width: 70px; height: 70px; border-radius: 50%;
-  background: var(--success-bg); border: 2px solid var(--success);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 34px; margin: 0 auto 16px;
-  box-shadow: 0 0 24px rgba(28,196,126,.3);
-  animation: popIn .5s cubic-bezier(.17,.67,.3,1.3);
-}
-@keyframes popIn {
-  from { transform: scale(0); opacity: 0; }
-  to   { transform: scale(1); opacity: 1; }
-}
-.done-title    { font-size: 26px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
-.done-subtitle { font-size: 15px; color: var(--muted); }
+.done-hero { text-align: center; padding: 24px 0 32px; }
+.done-hero h2 { font-size: 28px; font-weight: 700; margin: 12px 0 8px; }
+.done-hero p { color: var(--text2); max-width: 480px; margin: 0 auto; }
+.done-check { width: 64px; height: 64px; border-radius: 50%; background: var(--success); color: #fff; font-size: 32px; display: flex; align-items: center; justify-content: center; margin: 0 auto; }
+.done-check-small { display: inline-flex; width: 24px; height: 24px; border-radius: 50%; background: var(--success); color: #fff; font-size: 14px; align-items: center; justify-content: center; margin-right: 8px; }
+.done-step-row { display: flex; gap: 16px; padding: 20px 0; border-top: 1px solid var(--border); transition: opacity .3s; }
+.done-step-num { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+.done-step-title { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+.done-step-desc { font-size: 13px; color: var(--text2); margin-bottom: 12px; }
+.done-step-body { flex: 1; }
+.done-complete-msg { display: flex; align-items: center; padding: 16px; background: var(--success-bg); border: 1px solid var(--success); border-radius: var(--radius); margin-top: 16px; font-size: 14px; }
 
 .snippet-wrap {
   background: #06060f; border: 1px solid var(--border);
@@ -1172,39 +1171,51 @@ button.btn:disabled { opacity: .4; cursor: not-allowed; }
       <!-- ══ Step 6: Done ══ -->
       <div class="wiz-panel" id="wpanel-5" role="tabpanel" aria-label="Setup complete">
         <div class="done-hero">
-          <div class="done-checkmark" aria-hidden="true">✓</div>
-          <div class="done-title">You're all set!</div>
-          <div class="done-subtitle">Add the snippet below to Claude Desktop and restart it.</div>
+          <div class="done-check">✓</div>
+          <h2>You're all set!</h2>
+          <p>ProtonMail MCP is configured. The last step is letting Claude Desktop know about it.</p>
         </div>
 
-        <div class="snippet-wrap" id="wiz-snippet" aria-label="Claude Desktop config snippet">Loading…</div>
-        <div class="snippet-actions">
-          <button class="btn btn-ghost btn-sm" onclick="wizCopySnippet()" aria-label="Copy config snippet">
-            Copy Snippet
-          </button>
+        <div id="done-write-section">
+          <div class="done-step-row">
+            <div class="done-step-num">1</div>
+            <div class="done-step-body">
+              <div class="done-step-title">Add to Claude Desktop</div>
+              <div class="done-step-desc">Writes one entry to your Claude Desktop config file. Won't affect any other MCP servers you have set up.</div>
+              <button class="btn btn-primary" id="btn-write-claude" onclick="wizWriteClaudeDesktop()" aria-label="Write Claude Desktop config">
+                Write Config →
+              </button>
+              <div id="write-result" style="display:none"></div>
+            </div>
+          </div>
+
+          <div class="done-step-row" id="restart-row" style="opacity:0.4;pointer-events:none">
+            <div class="done-step-num">2</div>
+            <div class="done-step-body">
+              <div class="done-step-title">Restart Claude Desktop</div>
+              <div class="done-step-desc">Claude Desktop loads MCP servers at startup. A restart picks up the new config.</div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+                <button class="btn btn-primary" id="btn-restart-claude" onclick="wizRestartClaude()" aria-label="Restart Claude Desktop">
+                  Restart Claude Desktop
+                </button>
+                <button class="btn btn-ghost" onclick="wizSkipRestart()" aria-label="I will restart manually">
+                  I'll restart manually
+                </button>
+              </div>
+              <div id="restart-result" style="display:none"></div>
+            </div>
+          </div>
         </div>
 
-        <div class="config-path-locations">
-          <strong>Claude Desktop config file location:</strong><br>
-          macOS: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code><br>
-          Windows: <code>%APPDATA%\\Claude\\claude_desktop_config.json</code><br>
-          Linux: <code>~/.config/Claude/claude_desktop_config.json</code>
+        <div id="done-complete" style="display:none" class="done-complete-msg">
+          <div class="done-check-small">✓</div>
+          <strong>Done!</strong> Claude Desktop is restarting. Open it in a few seconds and ProtonMail will be available.
         </div>
 
-        <div class="prompt-pills">
-          <div class="prompt-pills-title">Try these prompts in Claude</div>
-          <span class="prompt-pill">"Show my unread emails"</span>
-          <span class="prompt-pill">"What folders do I have?"</span>
-          <span class="prompt-pill">"Check my connection status"</span>
-          <span class="prompt-pill">"Summarise emails from this week"</span>
-          <span class="prompt-pill">"Who do I email most often?"</span>
-        </div>
-
-        <div class="wiz-actions" style="margin-top:20px">
+        <div class="wiz-actions" style="margin-top:24px">
+          <button class="btn btn-ghost" onclick="wizGo(4)" aria-label="Back to Review">← Back</button>
           <div class="spacer"></div>
-          <button class="btn btn-primary" onclick="openSettingsView()" aria-label="Open settings">
-            Open Settings ↗
-          </button>
+          <button class="btn btn-ghost" onclick="openSettingsView()" aria-label="Open full settings">Open Settings</button>
         </div>
       </div>
 
@@ -1724,32 +1735,80 @@ button.btn:disabled { opacity: .4; cursor: not-allowed; }
   };
 
   // ── Step 6: Done ──────────────────────────────────────────────────────────
-  function wizBuildSnippet() {
-    const username = document.getElementById('wiz-username')?.value.trim()
-      || W.username || 'you@proton.me';
-    const snippet = {
-      mcpServers: {
-        protonmail: {
-          command: 'npx',
-          args: ['-y', 'protonmail-mcp-server'],
-          env: {
-            PROTONMAIL_USERNAME: username,
-            PROTONMAIL_PASSWORD: '(your-bridge-password)',
-            PROTONMAIL_SMTP_HOST: W.smtpHost,
-            PROTONMAIL_SMTP_PORT: String(W.smtpPort),
-            PROTONMAIL_IMAP_HOST: W.imapHost,
-            PROTONMAIL_IMAP_PORT: String(W.imapPort),
-            ...(W.certPath ? { PROTONMAIL_BRIDGE_CERT: W.certPath } : {}),
-          },
-        },
-      },
-    };
-    document.getElementById('wiz-snippet').textContent = JSON.stringify(snippet, null, 2);
-  }
+  window.wizBuildSnippet = function() {
+    // reset state when navigating to this step
+    document.getElementById('write-result').style.display = 'none';
+    document.getElementById('restart-result').style.display = 'none';
+    document.getElementById('done-complete').style.display = 'none';
+    document.getElementById('done-write-section').style.display = '';
+    document.getElementById('restart-row').style.opacity = '0.4';
+    document.getElementById('restart-row').style.pointerEvents = 'none';
+    const btn = document.getElementById('btn-write-claude');
+    if (btn) { btn.disabled = false; btn.textContent = 'Write Config →'; }
+  };
 
-  window.wizCopySnippet = function() {
-    const text = document.getElementById('wiz-snippet').textContent;
-    navigator.clipboard.writeText(text).then(() => toast('Copied!', 'ok'));
+  window.wizWriteClaudeDesktop = async function() {
+    const btn = document.getElementById('btn-write-claude');
+    const resultEl = document.getElementById('write-result');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Writing…';
+    resultEl.style.display = 'none';
+    try {
+      const r = await fetch('/api/write-claude-desktop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({})
+      });
+      const data = await r.json();
+      if (data.ok) {
+        btn.textContent = '✓ Written';
+        btn.className = 'btn btn-success';
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="hint" style="color:var(--success);margin-top:8px">✓ Saved to <code>' + escHtml(data.configPath) + '</code></div>';
+        // unlock step 2
+        document.getElementById('restart-row').style.opacity = '';
+        document.getElementById('restart-row').style.pointerEvents = '';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Write Config →';
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<div class="hint" style="color:var(--danger);margin-top:8px">✗ ' + escHtml(data.error || 'Failed') + '</div>';
+      }
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = 'Write Config →';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<div class="hint" style="color:var(--danger);margin-top:8px">✗ Network error</div>';
+    }
+  };
+
+  window.wizRestartClaude = async function() {
+    const btn = document.getElementById('btn-restart-claude');
+    const resultEl = document.getElementById('restart-result');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Restarting…';
+    try {
+      const r = await fetch('/api/restart-claude-desktop', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({})
+      });
+      const data = await r.json();
+      document.getElementById('done-write-section').style.display = 'none';
+      document.getElementById('done-complete').style.display = 'flex';
+    } catch(e) {
+      btn.disabled = false;
+      btn.textContent = 'Restart Claude Desktop';
+      resultEl.style.display = 'block';
+      resultEl.innerHTML = '<div class="hint" style="color:var(--danger);margin-top:8px">✗ Could not restart automatically — please restart Claude Desktop manually.</div>';
+    }
+  };
+
+  window.wizSkipRestart = function() {
+    document.getElementById('done-write-section').style.display = 'none';
+    document.getElementById('done-complete').style.display = 'flex';
+    document.getElementById('done-complete').querySelector('strong').textContent = 'Done!';
+    document.getElementById('done-complete').querySelector('strong').nextSibling.textContent = ' Restart Claude Desktop when you\\'re ready — ProtonMail will be available after it loads.';
   };
 
   // ── Shared: show/hide password ────────────────────────────────────────────
@@ -2574,6 +2633,102 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
         const result = denyEscalation(id, "browser_ui");
         if (!result.ok) { json(res, 400, { error: result.error }); return; }
         json(res, 200, { ok: true });
+        return;
+      }
+
+      // ── POST /api/write-claude-desktop ────────────────────────────────────
+      if (method === "POST" && path === "/api/write-claude-desktop") {
+        if (!requireCsrf(req, res)) return;
+        if (lan && accessToken && !hasValidAccessToken(req, url, accessToken)) {
+          json(res, 401, { error: "Access denied." }); return;
+        }
+        try {
+          const platform = process.platform;
+          let claudeConfigPath: string;
+          if (platform === "win32") {
+            claudeConfigPath = nodePath.join(process.env.APPDATA ?? "", "Claude", "claude_desktop_config.json");
+          } else if (platform === "darwin") {
+            claudeConfigPath = nodePath.join(os.homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json");
+          } else {
+            claudeConfigPath = nodePath.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json");
+          }
+
+          let existing: any = {};
+          try {
+            const raw = readFileSync(claudeConfigPath, "utf8");
+            existing = JSON.parse(raw);
+          } catch {
+            // File missing or invalid — start fresh
+            existing = {};
+          }
+
+          const distIndexPath = nodePath.resolve(process.cwd(), "dist", "index.js");
+          const entry = {
+            command: "node",
+            args: [distIndexPath],
+          };
+
+          if (!existing.mcpServers || typeof existing.mcpServers !== "object") {
+            existing.mcpServers = {};
+          }
+          existing.mcpServers["protonmail"] = entry;
+
+          // Write atomically via temp file + rename
+          const tmpPath = claudeConfigPath + ".tmp." + randomBytes(6).toString("hex");
+          writeFileSync(tmpPath, JSON.stringify(existing, null, 2), "utf8");
+          renameSync(tmpPath, claudeConfigPath);
+
+          json(res, 200, { ok: true, configPath: claudeConfigPath, entry });
+        } catch (e: any) {
+          json(res, 200, { ok: false, error: String(e?.message ?? e) });
+        }
+        return;
+      }
+
+      // ── POST /api/restart-claude-desktop ──────────────────────────────────
+      if (method === "POST" && path === "/api/restart-claude-desktop") {
+        if (!requireCsrf(req, res)) return;
+        if (lan && accessToken && !hasValidAccessToken(req, url, accessToken)) {
+          json(res, 401, { error: "Access denied." }); return;
+        }
+        try {
+          const platform = process.platform;
+
+          // Kill Claude Desktop (ignore errors — may not be running)
+          await new Promise<void>((resolve) => {
+            let killCmd: string;
+            let killArgs: string[];
+            if (platform === "win32") {
+              killCmd = "taskkill";
+              killArgs = ["/IM", "Claude.exe", "/F"];
+            } else if (platform === "darwin") {
+              killCmd = "killall";
+              killArgs = ["Claude"];
+            } else {
+              killCmd = "pkill";
+              killArgs = ["-f", "Claude"];
+            }
+            const killProc = spawn(killCmd, killArgs, { stdio: "ignore" });
+            killProc.on("close", () => resolve());
+            killProc.on("error", () => resolve());
+          });
+
+          // Wait ~500ms before relaunching
+          await new Promise<void>((resolve) => setTimeout(resolve, 500));
+
+          // Relaunch Claude Desktop (fire-and-forget)
+          if (platform === "win32") {
+            spawn("cmd", ["/c", "start", "Claude"], { stdio: "ignore", detached: true }).unref();
+          } else if (platform === "darwin") {
+            spawn("open", ["-a", "Claude"], { stdio: "ignore", detached: true }).unref();
+          } else {
+            spawn("Claude", [], { stdio: "ignore", detached: true, shell: true }).unref();
+          }
+
+          json(res, 200, { ok: true });
+        } catch (e: any) {
+          json(res, 200, { ok: true }); // Still return ok — kill may fail if not running
+        }
         return;
       }
 
