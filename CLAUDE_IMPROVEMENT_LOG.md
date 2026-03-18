@@ -4,6 +4,35 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #47 — 100% utility test coverage (logger, tracer, helpers)
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commit:** 91242fe
+
+### Work Completed
+1. `logger.test.ts` — 22 new tests covering: `getLogs` (level filter, limit, clamp), `clearLogs`, maxLogs ring-buffer eviction (1000-entry cap), all `sanitizeData` branches (null/undefined/boolean/numeric passthrough, string truncation at 200 chars, C0 control-char replacement, sensitive key redaction for password/body/smtpToken, array handling, nested objects, circular reference → `[circular]`)
+2. `tracer.test.ts` — created from scratch with 20 tests: `setEnabled`/`isEnabled` toggle, `currentTraceId` inside/outside span, `span` and `spanSync` in disabled (fast-path) and enabled modes, nested span traceId propagation, Error and non-Error throw re-propagation (errorType coverage)
+3. `helpers.test.ts` — added tests for: `retry` (success, partial retry, full exhaustion at zero delay), `sleep` (resolves to undefined), `generateId` (UUID v4 format, uniqueness), `parseDate`, `validateTargetFolder` non-string branch (was the sole uncovered line), `isValidEmail` RFC 5321 length limits (email >320 chars, domain >253 chars)
+4. `vitest.config.ts` — raised thresholds: statements 45→47, branches 38→40, functions 50→55, lines 47→49 (matching improved measurements)
+
+### Coverage Result
+| File | Before | After |
+|---|---|---|
+| helpers.ts | 85%/93%/74%/88% | **100%/100%/100%/100%** |
+| logger.ts | 79%/80%/71%/83% | **100%/100%/100%/100%** |
+| tracer.ts | 51%/11%/22%/49% | **100%/100%/100%/100%** |
+| **All files** | 47%/40%/52%/49% | **49%/43%/57%/51%** |
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 921/921 passed (was 861; +60 new tests)
+- `npm test -- --coverage` — ✅ all thresholds met
+
+### Git Status
+Pushed. Commit `91242fe` on `main`.
+
+---
+
 ## Cycle #46 — MCP prompt handler hardening
 **Timestamp:** 2026-03-18
 **Branch:** main
