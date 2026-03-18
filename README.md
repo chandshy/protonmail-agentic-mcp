@@ -480,6 +480,10 @@ src/
 
 ---
 
+## Acknowledgements
+
+This project was forked from [barhatch/protonmail-mcp-server](https://github.com/barhatch/protonmail-mcp-server), which provided the original foundation. We are grateful to barhatch for the groundwork that made this project possible.
+
 ## License
 
 MIT — see [LICENSE](LICENSE)
