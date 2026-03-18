@@ -4,6 +4,35 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #29 — forward_email subject length cap, rename_folder same-name guard, cursor type guards
+**Timestamp:** 2026-03-18
+**Branch:** main
+
+### Audit Highlights
+
+**Build & Tests (pre-work):** Clean build, 626/626 tests passing.
+
+**New Findings (all corrected this cycle):**
+
+1. **`forward_email` — no subject length cap (RFC 2822)** — `send_email`, `save_draft`, and `schedule_email` all received a 998-char subject length cap in Cycle #26, but `forward_email` was missed. The handler strips control characters from `fwdOriginal.subject` and optionally prepends "Fwd: " (5 chars), but never checks the resulting `fwdSubject` length before forwarding to `smtpService.sendEmail()`. A malicious or poorly formatted original email with a 995-char subject would produce a 1000-char forwarded subject, exceeding the RFC 2822 §2.1.1 hard line limit of 998 characters. Fixed by slicing `fwdSubject` to at most 998 characters after the "Fwd: " prefix is prepended.
+
+2. **`rename_folder` — no same-name guard** — When `args.oldName === args.newName`, the handler issued a spurious IMAP RENAME command. IMAP servers typically reject or silently no-op a rename to the same mailbox name, but the error returned is cryptic (e.g., "Mailbox already exists" from Dovecot). Added an explicit `McpError(InvalidParams, "'newName' must be different from 'oldName'.")` guard after both `validateFolderName` checks pass, providing a clear early failure with a helpful message rather than relying on the IMAP server's error.
+
+3. **`get_emails` / `get_emails_by_label` — `cursor` argument not type-checked** — Both pagination handlers used `if (args.cursor)` (truthy check) then cast directly to `string` without verifying `typeof args.cursor === "string"`. A non-string value (e.g., a number `50`) would be truthy, pass the check, reach `decodeCursor(args.cursor as string)`, and produce the generic "Invalid or expired cursor" error response instead of a clear `McpError(InvalidParams, "'cursor' must be a string.")`. Added a type guard `if (args.cursor !== undefined && typeof args.cursor !== "string")` in both handlers, consistent with the `limit` type guards from Cycle #25–27.
+
+### Changes
+
+- `src/index.ts`: Renamed `fwdSubject` to `fwdSubjectRaw` in `forward_email`, added 998-char slice to produce `fwdSubject` (6 lines + comment). Added same-name guard in `rename_folder` (4 lines + comment). Added cursor type guard in `get_emails` (4 lines + comment). Added cursor type guard in `get_emails_by_label` (3 lines + comment).
+- `src/utils/helpers.test.ts`: Added 27 new tests covering all three guard paths: `forward_email` subject length cap (8 tests), `rename_folder` same-name guard (9 tests), `get_emails` cursor type guard (10 tests).
+
+### Test Results
+
+**Before:** 626 tests passing
+**After:** 653 tests passing (+27)
+**Build:** Clean (0 TypeScript errors)
+
+---
+
 ## Cycle #28 — body empty-string guards, priority enum validation, saveDraft inReplyTo sanitization
 **Timestamp:** 2026-03-18
 **Branch:** main

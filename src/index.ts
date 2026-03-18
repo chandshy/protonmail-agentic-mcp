@@ -1673,9 +1673,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const fwdCleanSubject = fwdOriginal.subject.replace(/[\r\n\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "");
-        const fwdSubject = fwdCleanSubject.toLowerCase().startsWith("fwd:")
+        const fwdSubjectRaw = fwdCleanSubject.toLowerCase().startsWith("fwd:")
           ? fwdCleanSubject
           : `Fwd: ${fwdCleanSubject}`;
+        // RFC 2822 §2.1.1 hard limit — cap the forwarded subject at 998 chars,
+        // consistent with the guard applied to send_email/save_draft/schedule_email
+        // (Cycle #26).  The original email may itself have had a long subject, and
+        // prepending "Fwd: " (5 chars) can push it over the limit.
+        const fwdSubject = fwdSubjectRaw.length > MAX_SUBJECT_LENGTH
+          ? fwdSubjectRaw.slice(0, MAX_SUBJECT_LENGTH)
+          : fwdSubjectRaw;
 
         const fwdHeader = [
           "---------- Forwarded message ----------",
@@ -1732,6 +1739,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const limit = Math.min(Math.max(1, (args.limit as number) || 50), 200);
 
+        // Validate cursor type — a non-string value (e.g. a number) would be
+        // silently cast and reach decodeCursor with a wrong type, producing a
+        // confusing "Invalid or expired cursor" error instead of a type error.
+        if (args.cursor !== undefined && typeof args.cursor !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'cursor' must be a string.");
+        }
         // Decode cursor for offset, or start at 0
         let offset = 0;
         if (args.cursor) {
@@ -1855,6 +1868,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         const lblLimit = Math.min(Math.max((args.limit as number) || 50, 1), 200);
 
+        // Validate cursor type — mirrors the guard added to get_emails (Cycle #29).
+        if (args.cursor !== undefined && typeof args.cursor !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'cursor' must be a string.");
+        }
         let lblOffset = 0;
         if (args.cursor) {
           const decoded = decodeCursor(args.cursor as string);
@@ -2044,6 +2061,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (rfOldErr) throw new McpError(ErrorCode.InvalidParams, `oldName: ${rfOldErr}`);
         const rfNewErr = validateFolderName(args.newName);
         if (rfNewErr) throw new McpError(ErrorCode.InvalidParams, `newName: ${rfNewErr}`);
+        // Guard against a no-op rename — renaming a folder to the same name would
+        // result in a spurious IMAP RENAME command that servers may reject with a
+        // cryptic "Mailbox already exists" error rather than a clear message.
+        if ((args.oldName as string) === (args.newName as string)) {
+          throw new McpError(ErrorCode.InvalidParams, "'newName' must be different from 'oldName'.");
+        }
         await imapService.renameFolder(args.oldName as string, args.newName as string);
         return actionOk();
       }

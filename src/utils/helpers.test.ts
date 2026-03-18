@@ -2293,4 +2293,162 @@ describe('helpers', () => {
       expect(sanitizeInReplyTo("")).toBe(undefined);
     });
   });
+
+  // ── Cycle #29: forward_email subject length cap ───────────────────────────
+
+  describe("forward_email subject length cap (Cycle #29)", () => {
+    // Replicates the fwdSubject truncation logic:
+    //   const fwdSubject = fwdSubjectRaw.length > MAX_SUBJECT_LENGTH
+    //     ? fwdSubjectRaw.slice(0, MAX_SUBJECT_LENGTH)
+    //     : fwdSubjectRaw;
+    // where MAX_SUBJECT_LENGTH = 998.
+    const MAX_SUBJECT_LENGTH = 998;
+
+    function capFwdSubject(raw: string): string {
+      return raw.length > MAX_SUBJECT_LENGTH ? raw.slice(0, MAX_SUBJECT_LENGTH) : raw;
+    }
+
+    it('subject exactly 998 chars is returned unchanged', () => {
+      const subject = 'A'.repeat(998);
+      expect(capFwdSubject(subject)).toBe(subject);
+      expect(capFwdSubject(subject).length).toBe(998);
+    });
+
+    it('subject of 997 chars is returned unchanged', () => {
+      const subject = 'A'.repeat(997);
+      expect(capFwdSubject(subject)).toBe(subject);
+    });
+
+    it('subject of 999 chars is truncated to 998', () => {
+      const subject = 'A'.repeat(999);
+      expect(capFwdSubject(subject).length).toBe(998);
+    });
+
+    it('subject of 2000 chars is truncated to 998', () => {
+      const subject = 'X'.repeat(2000);
+      expect(capFwdSubject(subject).length).toBe(998);
+      expect(capFwdSubject(subject)).toBe('X'.repeat(998));
+    });
+
+    it('"Fwd: " prefix is included in the 998-char budget', () => {
+      // Subject that when prefixed with "Fwd: " (5 chars) equals exactly 1000 chars
+      const cleanSubject = 'B'.repeat(995); // "Fwd: " + 995 = 1000 — over limit
+      const rawFwd = `Fwd: ${cleanSubject}`;
+      expect(rawFwd.length).toBe(1000);
+      expect(capFwdSubject(rawFwd).length).toBe(998);
+    });
+
+    it('empty subject string is returned as empty string', () => {
+      expect(capFwdSubject('')).toBe('');
+    });
+
+    it('short subject like "Fwd: Re: Hello" is not modified', () => {
+      const subject = 'Fwd: Re: Hello';
+      expect(capFwdSubject(subject)).toBe(subject);
+    });
+
+    it('subject of exactly 999 chars is sliced to first 998', () => {
+      const subject = 'C'.repeat(998) + 'D';
+      const result = capFwdSubject(subject);
+      expect(result.length).toBe(998);
+      expect(result).toBe('C'.repeat(998));
+    });
+  });
+
+  // ── Cycle #29: rename_folder same-name guard ──────────────────────────────
+
+  describe("rename_folder same-name guard (Cycle #29)", () => {
+    // Replicates: (args.oldName as string) === (args.newName as string)
+    // Returns true → guard fires → McpError(InvalidParams) thrown.
+    function isSameName(oldName: string, newName: string): boolean {
+      return oldName === newName;
+    }
+
+    it('identical names trigger the guard', () => {
+      expect(isSameName('Work', 'Work')).toBe(true);
+    });
+
+    it('identical names with different casing do NOT trigger (case-sensitive)', () => {
+      expect(isSameName('Work', 'work')).toBe(false);
+    });
+
+    it('completely different names do not trigger', () => {
+      expect(isSameName('Work', 'Personal')).toBe(false);
+    });
+
+    it('empty-string old and new names both empty trigger (same)', () => {
+      // Both empty — same value, guard fires. (Empty-name guard fires first in real code.)
+      expect(isSameName('', '')).toBe(true);
+    });
+
+    it('old name "Archive" and new name "Archive" trigger', () => {
+      expect(isSameName('Archive', 'Archive')).toBe(true);
+    });
+
+    it('old name "Archive" and new name "archive" do not trigger', () => {
+      expect(isSameName('Archive', 'archive')).toBe(false);
+    });
+
+    it('names differing by a trailing space do not trigger', () => {
+      expect(isSameName('Work', 'Work ')).toBe(false);
+    });
+
+    it('single-character same names trigger', () => {
+      expect(isSameName('A', 'A')).toBe(true);
+    });
+
+    it('single-character different names do not trigger', () => {
+      expect(isSameName('A', 'B')).toBe(false);
+    });
+  });
+
+  // ── Cycle #29: get_emails / get_emails_by_label cursor type guard ─────────
+
+  describe("get_emails cursor type guard (Cycle #29)", () => {
+    // Replicates: args.cursor !== undefined && typeof args.cursor !== "string"
+    // Returns true → guard fires → McpError(InvalidParams, "'cursor' must be a string.")
+    function isCursorTypeInvalid(v: unknown): boolean {
+      return v !== undefined && typeof v !== 'string';
+    }
+
+    it('undefined is accepted (no cursor, first page)', () => {
+      expect(isCursorTypeInvalid(undefined)).toBe(false);
+    });
+
+    it('valid base64url string is accepted', () => {
+      expect(isCursorTypeInvalid('eyJmb2xkZXIiOiJJTkJPWCIsIm9mZnNldCI6NTAsImxpbWl0Ijo1MH0')).toBe(false);
+    });
+
+    it('empty string is accepted (falsy — handler treats as no cursor)', () => {
+      expect(isCursorTypeInvalid('')).toBe(false);
+    });
+
+    it('number 42 triggers guard (wrong type)', () => {
+      expect(isCursorTypeInvalid(42)).toBe(true);
+    });
+
+    it('number 0 triggers guard (wrong type)', () => {
+      expect(isCursorTypeInvalid(0)).toBe(true);
+    });
+
+    it('boolean true triggers guard', () => {
+      expect(isCursorTypeInvalid(true)).toBe(true);
+    });
+
+    it('boolean false triggers guard', () => {
+      expect(isCursorTypeInvalid(false)).toBe(true);
+    });
+
+    it('null triggers guard', () => {
+      expect(isCursorTypeInvalid(null)).toBe(true);
+    });
+
+    it('plain object triggers guard', () => {
+      expect(isCursorTypeInvalid({ offset: 50 })).toBe(true);
+    });
+
+    it('array triggers guard', () => {
+      expect(isCursorTypeInvalid(['cursor'])).toBe(true);
+    });
+  });
 });

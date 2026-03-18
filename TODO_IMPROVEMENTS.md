@@ -1,6 +1,6 @@
 # TODO Improvements — Prioritized Backlog
 
-Last updated: Cycle #28 (2026-03-18)
+Last updated: Cycle #29 (2026-03-18)
 
 ---
 
@@ -302,4 +302,17 @@ The inputSchema declares `enum: ["high", "normal", "low"]` but the handler cast 
 ### [DONE - Cycle 28] `saveDraft` `inReplyTo` — not CRLF-sanitized in IMAP service
 In `smtp-service.ts`, `inReplyTo` was already sanitized via `stripHeaderInjection()`. In `simple-imap-service.ts` `saveDraft()`, `options.inReplyTo` was passed raw to nodemailer — a crafted value like `"<id>\r\nBcc: evil@x.com"` could inject a MIME header. Added `options.inReplyTo.replace(/[\r\n\x00]/g, "")` to match the SMTP service behaviour. `references` on the next line already stripped control chars; `inReplyTo` was the sole gap.
 
-IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 28 cycles
+---
+
+## NEW — Cycle #29 Findings (all completed in Cycle #29)
+
+### [DONE - Cycle 29] `forward_email` — no subject length cap (RFC 2822)
+`send_email`, `save_draft`, and `schedule_email` all received a 998-char subject length cap in Cycle #26, but `forward_email` was missed. The handler builds `fwdSubject` from the original email's subject (control-char-stripped) plus optional "Fwd: " prefix, then passes it to `smtpService.sendEmail()` without a length check. A long original subject can exceed 998 chars. Fixed by slicing `fwdSubject` to 998 chars after the prefix is applied.
+
+### [DONE - Cycle 29] `rename_folder` — no same-name guard
+When `args.oldName === args.newName`, the handler issued a spurious IMAP RENAME command that servers reject with cryptic errors (e.g., "Mailbox already exists" from Dovecot). Added explicit `McpError(InvalidParams, "'newName' must be different from 'oldName'.")` guard after both `validateFolderName` checks pass.
+
+### [DONE - Cycle 29] `get_emails` / `get_emails_by_label` — `cursor` not type-checked
+Both pagination handlers used `if (args.cursor)` (truthy) then `args.cursor as string` cast without `typeof` check. A non-string value (e.g., number `50`) would be truthy, pass the check, and produce the generic "Invalid or expired cursor" error response instead of a clear type error. Added `if (args.cursor !== undefined && typeof args.cursor !== "string") throw McpError(InvalidParams, "'cursor' must be a string.")` in both handlers.
+
+IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 29 cycles
