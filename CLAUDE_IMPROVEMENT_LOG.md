@@ -405,6 +405,69 @@ No new HIGH/MEDIUM issues found. Confirmed all cycle 1–7 fixes still intact.
 
 ---
 
+## Cycle #9
+**Timestamp:** 2026-03-18 01:40–01:55 Eastern
+**Git commit:** `a30de17`
+**Branch:** main
+**Model:** claude-sonnet-4-6
+
+### Audit Highlights (new findings this cycle)
+
+No new HIGH/MEDIUM issues found. Confirmed all cycle 1–8 fixes still intact.
+
+**Confirmed from Next Cycle Focus list:**
+- `move_to_label` handler — `args.emailId as string` passed to `imapService.moveEmail()` without handler-level numeric UID guard. Inconsistent with all other single-email action handlers. (now fixed)
+- `remove_label` handler — same gap as `move_to_label`. (now fixed)
+- `save_draft` / `schedule_email` attachment validation — `args.attachments as any` passed to services without handler-level field validation.
+
+**New finding on attachment path:**
+- `schedule_email` → `schedulerService.schedule()` → eventual `smtpService.sendEmail()`. The SMTP service already has full attachment validation (count cap, size cap, filename/contentType header-injection stripping, MIME type format check). No gap on this path.
+- `save_draft` → `imapService.saveDraft()`. The `saveDraft` method in `simple-imap-service.ts` passed `att.filename` and `att.contentType` directly to nodemailer without ANY sanitization — unlike `smtp-service.ts` which strips CRLF/NUL from both fields and validates contentType format. A crafted attachment with `filename: "a.pdf\r\nContent-Type: text/html"` or `contentType: "text/html\r\nX-Injected: yes"` would break the MIME structure of the saved draft. This is a real (LOW severity) gap — now fixed at the service layer.
+
+**Systematic scan conclusion:** ALL single-email action handlers now have handler-level numeric UID guards. The handler-level validation sweep that began in Cycle #5 is now complete for all handlers.
+
+### Work Completed This Cycle
+
+1. **`move_to_label`** — Added `!/^\d+$/.test(mtlEmailId)` guard at handler entry before label validation. Local variable `mtlEmailId` used (consistent naming convention). `imapService.moveEmail()` now receives the validated variable, not the raw `args.emailId as string` cast. (+4 lines)
+
+2. **`remove_label`** — Added identical `!/^\d+$/.test(rlEmailId)` guard before the existing `validateTargetFolder` check. (+4 lines)
+
+3. **`saveDraft` attachment sanitization in `simple-imap-service.ts`** — Replaced the raw `att.filename` / `att.contentType` pass-through with inline sanitization mirroring `smtp-service.ts`:
+   - `filename`: strip CRLF/NUL with `replace(/[\r\n\x00]/g, "")`, truncate to 255 chars, fall back to `"attachment"` if empty after strip.
+   - `contentType`: strip CRLF/NUL, validate against `/^[\w!#$&\-^]+\/[\w!#$&\-^+.]+$/` (type/subtype format), fall back to `undefined` if invalid.
+   (+17 lines, -5 lines)
+
+4. **Add 27 unit tests** — Three new `describe` blocks in `src/utils/helpers.test.ts`:
+   - `move_to_label / remove_label handler validation (numeric emailId guard)` — 11 tests: valid "42"/"1"/"999999", empty, "abc", "12x", "-5", "3.14", null, undefined, null-byte
+   - `saveDraft attachment filename sanitization` — 7 tests: plain filename, CRLF injection, LF injection, NUL byte, over-255-char, empty-after-strip fallback, undefined
+   - `saveDraft attachment contentType sanitization` — 9 tests: valid "application/pdf"/"image/png"/"text/plain", CRLF injection rejected, NUL byte stripped then validated, no-slash rejected, empty undefined, undefined, spaces rejected
+   (+128 lines in helpers.test.ts)
+
+**Files changed:** `src/index.ts` (+8 lines), `src/services/simple-imap-service.ts` (+17 lines, -5 lines), `src/utils/helpers.test.ts` (+128 lines)
+
+### Validation Results
+
+- `npm run build` — PASS (0 TypeScript errors)
+- `npm test` — PASS (374/374 tests, 14 test files, +27 new tests vs 347 in cycle 8)
+
+### Git Status
+
+- Commit: `a30de17`
+- Pushed to: `origin/main`
+
+### Next Cycle Focus
+
+**Handler-level validation sweep is now COMPLETE.** All single-email action handlers and folder-path handlers have been hardened over Cycles #1–#9. Shift focus to code quality, documentation, and test coverage gaps.
+
+**Priority items for Cycle #10:**
+1. Code quality — scan for unused imports in `src/index.ts` and service files (`import X from Y` that are never referenced). Remove dead code. (~LOW effort, improves maintainability)
+2. Type safety — find remaining `as any` casts in production code (not test files). Assess whether they can be narrowed to proper types. Focus on `src/index.ts` and service files.
+3. JSDoc coverage — add JSDoc comments to public methods in `src/services/` that are missing them (particularly `SimpleIMAPService` and `SmtpService` public methods). (~LOW effort, improves documentation)
+4. IMAP reconnect / NOOP health check — architectural backlog, still deferred (medium effort, moderate risk).
+5. Cursor token HMAC binding — architectural backlog, still deferred.
+
+---
+
 ## Cycle #6
 **Timestamp:** 2026-03-18 00:50–01:00 Eastern
 **Git commit:** `403dcaa`

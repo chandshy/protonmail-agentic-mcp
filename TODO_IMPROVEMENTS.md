@@ -1,6 +1,6 @@
 # TODO Improvements — Prioritized Backlog
 
-Last updated: Cycle #7 (2026-03-18)
+Last updated: Cycle #9 (2026-03-18)
 
 ---
 
@@ -94,18 +94,35 @@ Systematic audit performed. All `args.emailId as string` casts now have handler-
 
 ---
 
-## NEW — Cycle #8 Findings
+## NEW — Cycle #8 Findings (all completed in Cycle #9)
 
-### 15. `move_to_label` / `remove_label` — missing numeric emailId guard
-**File:** `src/index.ts`
-**Issue:** Both handlers use `args.emailId as string` with no handler-level numeric UID guard. The IMAP service's private `validateEmailId` protects internally but throws a raw `Error` (opaque message). Inconsistent with all other single-email action handlers.
-**Effort:** LOW — 3-4 lines per handler, same pattern as Cycle #7/#8 fixes
-**Risk:** LOW
+### [DONE - Cycle 9] `move_to_label` / `remove_label` — missing numeric emailId guard
+Added `!/^\d+$/.test(emailId)` guard to both handlers. `mtlEmailId` and `rlEmailId` local variables introduced (consistent naming). Returns `McpError(InvalidParams, "emailId must be a non-empty numeric UID string.")`.
 
-### 16. `save_draft` / `schedule_email` attachment validation (carried from Cycle #7)
-Same as item 14 above — still unaddressed.
+### [DONE - Cycle 9] `save_draft` attachment validation — filename/contentType sanitization gap
+`saveDraft` in `simple-imap-service.ts` now strips CRLF/NUL from `filename` (truncates to 255 chars, falls back to "attachment"), and validates `contentType` against type/subtype regex (falls back to undefined if invalid). Mirrors the robust sanitization already present in `smtp-service.ts sendEmail()`.
+
+---
+
+## NEW — Cycle #9 Findings
+
+### 17. Code quality — unused imports / dead code
+**Files:** `src/index.ts`, service files
+**Issue:** Some imports may be unused after refactoring across cycles. No specific instances identified yet — needs a scan.
+**Effort:** LOW
+**Risk:** None (cleanup only)
+
+### 18. Type safety — remaining `as any` casts in production code
+**Files:** `src/index.ts`, service files
+**Issue:** Several `args.X as any` casts remain (e.g. `args.attachments as any`). Some may be narrowable to proper types.
 **Effort:** LOW–MEDIUM
-**Risk:** LOW
+**Risk:** LOW (type improvements only)
+
+### 19. JSDoc coverage — public methods in service files
+**Files:** `src/services/simple-imap-service.ts`, `src/services/smtp-service.ts`
+**Issue:** Many public methods lack JSDoc comments. Adding JSDoc improves IDE support and codebase comprehension.
+**Effort:** LOW
+**Risk:** None
 
 ---
 

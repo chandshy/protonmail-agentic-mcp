@@ -1,68 +1,70 @@
-# Last Audit Summary — Cycle #8
-**Date:** 2026-03-18 01:20 Eastern
+# Last Audit Summary — Cycle #9
+**Date:** 2026-03-18 01:40 Eastern
 **Auditor:** Claude Sonnet 4.6 (auto-improve cycle)
 
 ---
 
 ## Scope
 
-This cycle performed a focused audit of the areas flagged in Cycle #7's "Next Cycle Focus":
-- `src/index.ts` — `archive_email`, `move_to_trash`, `move_to_spam`, `move_email`, `delete_email`: handler-level numeric emailId guard
-- `src/index.ts` — bulk operation handlers (`bulk_delete_emails`, `bulk_move_emails`, `bulk_mark_read`, `bulk_star`, `bulk_move_to_label`, `bulk_remove_label`): array-item numeric UID validation
-- `src/index.ts` — `get_emails` and `sync_emails`: folder arg validation
-- `src/index.ts` — `request_permission_escalation`: `targetPreset` validation (confirmed already guarded by `isValidEscalationTarget()`)
-- `src/utils/helpers.ts` — current state of all validation helpers (no changes needed)
+This cycle performed a focused audit of the areas flagged in Cycle #8's "Next Cycle Focus":
+- `src/index.ts` — `move_to_label`, `remove_label`: handler-level numeric emailId guard
+- `src/index.ts` — `save_draft`, `schedule_email`: attachment field validation (`args.attachments as any`)
+- `src/services/simple-imap-service.ts` — `saveDraft`: attachment validation / sanitization
+- `src/services/smtp-service.ts` — `sendEmail`: attachment validation (confirmed already thorough)
+- `src/utils/helpers.ts` — current validation helpers (no changes needed)
 
-No new HIGH or MEDIUM issues found. All cycle 1–7 fixes confirmed intact.
+No new HIGH or MEDIUM issues found. All cycle 1–8 fixes confirmed intact.
 
 ---
 
 ## Issues Confirmed / Fixed This Cycle
 
-**[DONE] `archive_email`, `move_to_trash`, `move_to_spam` — numeric emailId guard**
-All three handlers now validate `args.emailId` with `!/^\d+$/.test(emailId)` at handler entry, throwing `McpError(InvalidParams, "emailId must be a non-empty numeric UID string.")` for invalid inputs. Previously, only the IMAP service's private `validateEmailId` ran, producing opaque `Error` objects. Pattern is now consistent with `get_email_by_id`, `mark_email_read`, `star_email`.
+**[DONE] `move_to_label` — numeric emailId guard**
+Handler now validates `args.emailId` with `!/^\d+$/.test(mtlEmailId)` at entry, before label validation and IMAP call. Returns `McpError(InvalidParams, "emailId must be a non-empty numeric UID string.")`. Consistent with all other single-email handlers fixed in Cycles #7 and #8.
 
-**[DONE] `move_email` — numeric emailId guard**
-Added numeric UID guard before the existing `validateTargetFolder` check. Handler now validates both emailId and targetFolder at entry.
+**[DONE] `remove_label` — numeric emailId guard**
+Same fix as `move_to_label`. `rlEmailId` local variable added. Validation runs before the existing `validateTargetFolder` check.
 
-**[DONE] `delete_email` — numeric emailId guard**
-Added numeric UID guard matching the established pattern.
+**[DONE] `saveDraft` attachment filename/contentType sanitization in `simple-imap-service.ts`**
+Previous code passed `att.filename` and `att.contentType` directly to nodemailer without sanitization. A crafted attachment with CRLF in the filename (e.g. `"report.pdf\r\nContent-Type: text/html"`) would break the Content-Disposition MIME header. Similarly a CRLF-containing contentType would break the Content-Type MIME header.
 
-**[DONE] `get_emails` folder — validateTargetFolder check**
-Added `validateTargetFolder(folder)` call immediately after resolving the folder default. The IMAP service's internal `validateFolderName` checked empty/length/control-chars but did NOT check for `..` (path traversal). Now closed at handler level.
+Now fixed to match `smtp-service.ts sendEmail()` behavior:
+- `filename`: `replace(/[\r\n\x00]/g, "")`, `slice(0, 255)`, fallback `"attachment"` if empty
+- `contentType`: `replace(/[\r\n\x00]/g, "")`, validated against `/^[\w!#$&\-^]+\/[\w!#$&\-^+.]+$/`, falls back to `undefined` if invalid
 
-**[DONE] Bulk operations — numeric UID filter on array items**
-Updated `.filter()` predicate in all 6 bulk handlers from `id.length > 0` to `/^\d+$/.test(id)`. Non-numeric IDs (alphabetic, float, negative, null-byte) are now silently excluded before reaching the IMAP service.
+**[DONE] `schedule_email` attachment validation — confirmed no gap**
+`schedule_email` stores options to `schedulerService`, which eventually calls `smtpService.sendEmail()`. That path already has thorough attachment validation (count cap, size cap, filename sanitization, contentType validation). No additional fix needed.
 
-**[DONE] Add 33 unit tests**
+**[DONE] Add 27 unit tests**
 Three new `describe` blocks added to `src/utils/helpers.test.ts`:
-- `archive_email / move_to_trash / move_to_spam / move_email / delete_email handler validation` — 11 tests
-- `get_emails handler validation (validateTargetFolder for folder arg)` — 9 tests
-- `bulk operation array-item numeric UID filter` — 13 tests
+- `move_to_label / remove_label handler validation (numeric emailId guard)` — 11 tests
+- `saveDraft attachment filename sanitization` — 7 tests
+- `saveDraft attachment contentType sanitization` — 9 tests
 
 ---
 
 ## Other Areas Reviewed (no issues found)
 
-- `request_permission_escalation` `targetPreset`: Uses `isValidEscalationTarget()` imported from `settings/security.ts`. Already fully protected — no gap.
-- `get_folder_emails`: Case does not exist in the switch statement. Not a tool.
-- `mark_email_unread` / `unstar_email`: Handled by `mark_email_read`/`star_email` with flag values, not separate cases. Both protected by Cycle #7 guards.
-- `sync_emails` folder: Same `validateTargetFolder` gap as `get_emails`. Also fixed this cycle (not listed separately above but fixed in the same edit).
-- `src/utils/helpers.ts` validation helpers: All in good shape. `validateLabelName`, `validateFolderName`, `validateTargetFolder` all complete and tested.
-- `src/types/index.ts` `ScheduledEmail`, `EmailAttachment`: Type-only definitions, no runtime guards needed here.
+- `smtp-service.ts sendEmail()` attachment handling: count cap (20), per-file size cap (25 MB), total size cap (25 MB), filename strip + truncate, contentType format validation. Thorough — no gaps.
+- `schedule_email` → `smtpService.sendEmail()`: attachment path goes through SMTP service validation. No gap.
+- `src/utils/helpers.ts`: All validation helpers complete and tested. No changes needed.
+- Handler-level validation sweep status: COMPLETE. All single-email action handlers and folder-path handlers have handler-level guards as of this cycle.
 
 ---
 
 ## Remaining / Newly Identified Issues
 
-**[LOW] `move_to_label` / `remove_label` — missing numeric emailId guard**
-Both single-email handlers use `args.emailId as string` with no handler-level numeric UID guard. The IMAP service's private `validateEmailId` protects internally but throws a raw `Error`. Inconsistent with all other single-email action handlers now fixed. Easy fix (~4 lines each).
+**[LOW] Code quality — unused imports / dead code scan**
+Several cycles of refactoring may have left unused imports. A scan of `src/index.ts` and service files for `import X` references that are never used would improve code hygiene. Easy fix, zero risk.
 
-**[LOW] `save_draft` / `schedule_email` attachment validation**
-`args.attachments as any` passes attachment objects (name, contentType, content) directly to `imapService.saveDraft()` without handler-level validation. Risk is LOW since content is base64-encoded and MIME encoding is handled by nodemailer/imapflow. Still worth closing.
+**[LOW] Type safety — remaining `as any` casts**
+Some `args.X as any` patterns remain in production code. These could be narrowed to proper types. `args.attachments as any` in `save_draft` and `schedule_email` are the most visible examples. Low effort, zero behavior change.
+
+**[LOW] JSDoc coverage — public methods in service files**
+`SimpleIMAPService` and `SmtpService` public methods lack JSDoc comments. Adding them improves IDE support and codebase comprehension.
 
 **[MEDIUM] IMAP reconnect on TCP RST**
-`ensureConnection()` relies on `isConnected` flag which doesn't detect silent TCP drops. Architectural — defer.
+`ensureConnection()` relies on `isConnected` flag which doesn't detect silent TCP drops. Architectural — still deferred.
 
 ---
 
@@ -72,6 +74,6 @@ Both single-email handlers use `args.emailId as string` with no handler-level nu
 |----------|-------|--------|
 | HIGH     | 0     | — |
 | MEDIUM   | 1     | IMAP reconnect (existing, architectural) |
-| LOW      | 2     | move_to_label/remove_label emailId + attachment validation |
+| LOW      | 3     | unused imports, as-any casts, JSDoc gaps |
 
-All HIGH/MEDIUM security issues from Cycles #1–7 are fixed and tested. Test count increased from 314 to 347 (+33 new tests). All targeted items from Cycle #7's Next Cycle Focus are now complete. The systematic `args.X as Y` audit is now effectively complete — the only remaining single-email handlers without a guard are `move_to_label` and `remove_label`.
+All HIGH/MEDIUM security issues from Cycles #1–8 are fixed and tested. Test count increased from 347 to 374 (+27 new tests). The systematic handler-level validation sweep is now COMPLETE — all single-email action handlers and folder-path handlers have been hardened. Focus shifts to code quality, type safety, and documentation in future cycles.
