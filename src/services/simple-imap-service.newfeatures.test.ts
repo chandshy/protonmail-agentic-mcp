@@ -333,3 +333,89 @@ describe("SimpleIMAPService private validateFolderName — path traversal guard"
     expect(() => (svc as any).validateFolderName("INBOX\x00evil")).toThrow(/control characters/i);
   });
 });
+
+// ─── Cycle #42: email cache byte-size limit ────────────────────────────────────
+
+/** Build a minimal EmailMessage with a body of the given length. */
+function makeEmail(id: string, bodyLength: number): import("../types/index.js").EmailMessage {
+  return {
+    id,
+    from: "a@b.com",
+    to: [],
+    subject: "s",
+    body: "x".repeat(bodyLength),
+    isHtml: false,
+    date: new Date(),
+    folder: "INBOX",
+    isRead: false,
+    isStarred: false,
+    hasAttachment: false,
+  };
+}
+
+describe("SimpleIMAPService cache byte-size limit", () => {
+  it("evicts oldest entry when MAX_EMAIL_CACHE_BYTES is exceeded", () => {
+    const svc = new SimpleIMAPService();
+    const MAX_BYTES = 50 * 1024 * 1024; // 50 MB
+
+    // Add a large email that fills ~49 MB of the estimate budget
+    const bigBodyLen = MAX_BYTES - 1024;
+    (svc as any).setCacheEntry("1", makeEmail("1", bigBodyLen));
+    expect((svc as any).emailCache.size).toBe(1);
+
+    // Add another entry that tips over the byte limit
+    (svc as any).setCacheEntry("2", makeEmail("2", 2048));
+
+    // Entry "1" should have been evicted to make room
+    expect((svc as any).emailCache.has("1")).toBe(false);
+    expect((svc as any).emailCache.has("2")).toBe(true);
+    expect((svc as any).cacheByteEstimate).toBeLessThanOrEqual(MAX_BYTES);
+  });
+
+  it("updates cacheByteEstimate when evictCacheEntry is called", () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).setCacheEntry("10", makeEmail("10", 1000));
+    const beforeBytes: number = (svc as any).cacheByteEstimate;
+    expect(beforeBytes).toBeGreaterThan(0);
+
+    (svc as any).evictCacheEntry("10");
+    expect((svc as any).cacheByteEstimate).toBeLessThan(beforeBytes);
+    expect((svc as any).emailCache.has("10")).toBe(false);
+  });
+
+  it("resets cacheByteEstimate to 0 on clearCacheAll", () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).setCacheEntry("20", makeEmail("20", 500));
+    (svc as any).setCacheEntry("21", makeEmail("21", 500));
+    expect((svc as any).cacheByteEstimate).toBeGreaterThan(0);
+
+    (svc as any).clearCacheAll();
+    expect((svc as any).cacheByteEstimate).toBe(0);
+    expect((svc as any).emailCache.size).toBe(0);
+  });
+
+  it("does not exceed count cap of 500 alongside byte limit", () => {
+    const svc = new SimpleIMAPService();
+    for (let i = 0; i < 510; i++) {
+      (svc as any).setCacheEntry(String(i), makeEmail(String(i), 50));
+    }
+    // Count should be capped at 500
+    expect((svc as any).emailCache.size).toBeLessThanOrEqual(500);
+    // Byte estimate should be positive and consistent
+    expect((svc as any).cacheByteEstimate).toBeGreaterThan(0);
+  });
+
+  it("updating an existing entry adjusts byte estimate correctly", () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).setCacheEntry("99", makeEmail("99", 100));
+    const bytesAfterFirst: number = (svc as any).cacheByteEstimate;
+
+    // Update same entry with a larger body
+    (svc as any).setCacheEntry("99", makeEmail("99", 1000));
+    const bytesAfterUpdate: number = (svc as any).cacheByteEstimate;
+
+    // Should still be only 1 entry, but with higher byte count
+    expect((svc as any).emailCache.size).toBe(1);
+    expect(bytesAfterUpdate).toBeGreaterThan(bytesAfterFirst);
+  });
+});

@@ -60,17 +60,22 @@ function truncateBody(body: string, maxLength: number = 300): string {
   return truncated + '...';
 }
 
-/** Maximum number of emails held in the in-process cache.
- *  Each cached email carries its full body + binary attachment content, so
- *  an unbounded map is a memory-exhaustion vector.  Oldest entries are evicted
- *  (FIFO) once the cap is reached — imapflow UIDs are monotonically increasing
- *  so the oldest key is reliably the first key in insertion order. */
+/** Maximum number of emails held in the in-process cache (count-based guard). */
 const MAX_EMAIL_CACHE_SIZE = 500;
+/**
+ * Maximum total byte estimate for the email cache (byte-size guard).
+ * Large HTML marketing emails can exceed 500 KB each; 500 × 500 KB = 250 MB is
+ * too much for a background MCP server.  50 MB is a practical upper bound that
+ * still allows hundreds of typical messages while preventing memory exhaustion.
+ */
+const MAX_EMAIL_CACHE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 export class SimpleIMAPService {
   private client: ImapFlow | null = null;
   private isConnected: boolean = false;
   private emailCache: Map<string, { email: EmailMessage; cachedAt: number }> = new Map();
+  /** Running byte estimate for emailCache — updated by evictCacheEntry/clearCacheAll/setCacheEntry. */
+  private cacheByteEstimate = 0;
   private folderCache: Map<string, EmailFolder> = new Map();
   private connectionConfig: { host: string; port: number; username?: string; password?: string; bridgeCertPath?: string; secure?: boolean } | null = null;
   /** Tracks UIDVALIDITY per folder path to detect server-side mailbox rebuilds. */
@@ -79,21 +84,74 @@ export class SimpleIMAPService {
   insecureTls = false;
 
   /**
-   * Write an entry to emailCache, evicting the oldest entry (FIFO) when the
-   * cap is reached.  Attachment binary content is stripped before caching to
-   * avoid multi-MB buffers accumulating in memory (GAP 7.5).
+   * Rough byte estimate for a single cached EmailMessage.
+   * Counts only the variable-length string fields; constant overhead is negligible.
+   */
+  private static estimateCacheBytes(email: EmailMessage): number {
+    return (
+      (email.body?.length    ?? 0) +
+      (email.subject?.length ?? 0) +
+      (email.from?.length    ?? 0) +
+      email.to.reduce((s, a) => s + a.length, 0) +
+      200 // fixed overhead for id, folder, flags, dates, headers
+    );
+  }
+
+  /**
+   * Remove one entry from emailCache and decrement the byte estimate.
+   * Use in place of direct `this.emailCache.delete(id)` everywhere.
+   */
+  private evictCacheEntry(id: string): void {
+    const entry = this.emailCache.get(id);
+    if (entry) {
+      this.cacheByteEstimate -= SimpleIMAPService.estimateCacheBytes(entry.email);
+      this.emailCache.delete(id);
+    }
+  }
+
+  /**
+   * Clear the entire emailCache and reset the byte estimate to zero.
+   * Use in place of direct `this.emailCache.clear()` everywhere.
+   */
+  private clearCacheAll(): void {
+    this.emailCache.clear();
+    this.cacheByteEstimate = 0;
+  }
+
+  /**
+   * Write an entry to emailCache, evicting oldest entries (FIFO) when either
+   * the count cap (500) or the byte cap (50 MB) is reached.
+   * Attachment binary content is stripped before caching to avoid multi-MB
+   * buffers accumulating in memory (GAP 7.5).
    */
   private setCacheEntry(id: string, email: EmailMessage): void {
-    if (!this.emailCache.has(id) && this.emailCache.size >= MAX_EMAIL_CACHE_SIZE) {
-      const oldest = this.emailCache.keys().next().value;
-      if (oldest !== undefined) this.emailCache.delete(oldest);
-    }
     // Strip attachment binary content before caching — content is re-fetched on demand
     const toCache: EmailMessage = {
       ...email,
       attachments: email.attachments?.map(a => ({ ...a, content: undefined })),
     };
+    const entryBytes = SimpleIMAPService.estimateCacheBytes(toCache);
+
+    // Evict oldest entries until both size and byte limits are satisfied
+    while (
+      this.emailCache.size > 0 &&
+      !this.emailCache.has(id) && // don't evict when updating an existing entry
+      (this.emailCache.size >= MAX_EMAIL_CACHE_SIZE ||
+       this.cacheByteEstimate + entryBytes > MAX_EMAIL_CACHE_BYTES)
+    ) {
+      const oldest = this.emailCache.keys().next().value;
+      if (oldest === undefined) break;
+      this.evictCacheEntry(oldest);
+    }
+
+    // If updating an existing entry, subtract its old byte contribution first
+    if (this.emailCache.has(id)) {
+      const old = this.emailCache.get(id)!;
+      this.cacheByteEstimate -= SimpleIMAPService.estimateCacheBytes(old.email);
+    }
+
     this.emailCache.set(id, { email: toCache, cachedAt: Date.now() });
+    this.cacheByteEstimate += entryBytes;
   }
 
   /**
@@ -115,7 +173,7 @@ export class SimpleIMAPService {
           'IMAPService'
         );
         // Safe fallback: clear the entire email cache
-        this.emailCache.clear();
+        this.clearCacheAll();
       }
       this.uidValidityMap.set(folder, currentValidity);
     } catch {
@@ -151,7 +209,7 @@ export class SimpleIMAPService {
     const entry = this.emailCache.get(id);
     if (!entry) return undefined;
     if (Date.now() - entry.cachedAt > SimpleIMAPService.CACHE_TTL_MS) {
-      this.emailCache.delete(id);
+      this.evictCacheEntry(id);
       return undefined;
     }
     return entry.email;
@@ -1342,7 +1400,7 @@ export class SimpleIMAPService {
       try {
         await this.client.messageDelete(emailId, { uid: true });
         // Remove from cache if present
-        this.emailCache.delete(emailId);
+        this.evictCacheEntry(emailId);
         logger.info(`Email ${emailId} deleted from ${folder}`, 'IMAPService');
         return true;
       } finally {
@@ -1513,7 +1571,7 @@ export class SimpleIMAPService {
         await this.client.messageDelete(emailId, { uid: true });
 
         // Remove from cache
-        this.emailCache.delete(emailId);
+        this.evictCacheEntry(emailId);
 
         logger.info(`Email ${emailId} deleted`, 'IMAPService');
         return true;
@@ -1567,7 +1625,7 @@ export class SimpleIMAPService {
         try {
           await this.client.messageDelete(uidSet, { uid: true });
           for (const emailId of ids) {
-            this.emailCache.delete(emailId);
+            this.evictCacheEntry(emailId);
             results.success++;
           }
         } catch (batchError: unknown) {
@@ -1576,7 +1634,7 @@ export class SimpleIMAPService {
           for (const emailId of ids) {
             try {
               await this.client.messageDelete(emailId, { uid: true });
-              this.emailCache.delete(emailId);
+              this.evictCacheEntry(emailId);
               results.success++;
             } catch (error: unknown) {
               results.failed++;
@@ -1777,14 +1835,14 @@ export class SimpleIMAPService {
             logger.debug('IDLE: new messages detected, invalidating cache', 'IMAPService', { count: data.count });
             // Invalidate only INBOX email cache entries (not all folders)
             for (const [id, entry] of this.emailCache) {
-              if (entry.email.folder === 'INBOX') this.emailCache.delete(id);
+              if (entry.email.folder === 'INBOX') this.evictCacheEntry(id);
             }
           });
 
           this.idleClient.on('expunge', () => {
             logger.debug('IDLE: expunge detected, invalidating INBOX cache', 'IMAPService');
             for (const [id, entry] of this.emailCache) {
-              if (entry.email.folder === 'INBOX') this.emailCache.delete(id);
+              if (entry.email.folder === 'INBOX') this.evictCacheEntry(id);
             }
           });
 
@@ -1817,7 +1875,7 @@ export class SimpleIMAPService {
   /** Clear all in-memory email and folder caches, forcing fresh IMAP fetches on next access. */
   clearCache(): void {
     tracer.spanSync('imap.clearCache', {}, () => {
-    this.emailCache.clear();
+    this.clearCacheAll();
     this.folderCache.clear();
     logger.info('IMAP cache cleared', 'IMAPService');
     }); // end tracer.spanSync('imap.clearCache')
@@ -1841,7 +1899,7 @@ export class SimpleIMAPService {
         }
       }
     }
-    this.emailCache.clear();
+    this.clearCacheAll();
     this.folderCache.clear();
 
     // Wipe stored connection credentials
