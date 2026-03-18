@@ -118,6 +118,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
     .replace(/'/g, "&#39;");
 
   return `<!DOCTYPE html>
+<!-- NEW WIZARD UI -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -125,460 +126,699 @@ function buildHtml(configPath: string, csrfToken: string): string {
 <meta name="csrf-token" content="${csrfToken}">
 <title>ProtonMail MCP — Settings</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  :root {
-    --bg:        #0f0f1a;
-    --surface:   #1a1a2e;
-    --surface2:  #222240;
-    --border:    #333366;
-    --primary:   #6d4aff;
-    --primary-h: #8060ff;
-    --success:   #1cc47e;
-    --danger:    #e84646;
-    --warn:      #f5a623;
-    --text:      #e0e0f0;
-    --muted:     #8888aa;
-    --radius:    8px;
-  }
+:root {
+  --bg:          #0f0e1a;
+  --surface:     #1a1830;
+  --surface2:    #22203a;
+  --surface3:    #2a2845;
+  --border:      #302e50;
+  --border2:     #403d68;
+  --primary:     #6d4aff;
+  --primary-h:   #5535e0;
+  --primary-bg:  #6d4aff18;
+  --success:     #1cc47e;
+  --success-bg:  #1cc47e18;
+  --danger:      #e84646;
+  --danger-bg:   #e8464618;
+  --warn:        #f5a623;
+  --warn-bg:     #f5a62318;
+  --text:        #e8e6f8;
+  --text2:       #c4c0e0;
+  --muted:       #7c78a8;
+  --radius:      14px;
+  --radius-sm:   8px;
+  --radius-xs:   5px;
+  --shadow:      0 2px 8px rgba(0,0,0,.4);
+  --shadow-md:   0 8px 24px rgba(0,0,0,.5);
+  --shadow-lg:   0 16px 48px rgba(0,0,0,.6);
+  --glow:        0 0 20px rgba(109,74,255,.25);
+}
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    font-size: 14px;
-    line-height: 1.5;
-  }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.6;
+}
 
-  /* ── Layout ─────────────────────────────────────────────── */
-  header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    height: 56px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
-  .logo { font-size: 20px; }
-  .header-title { font-weight: 600; font-size: 16px; flex: 1; }
-  .status-pill {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--muted);
-  }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .dot.ok { background: var(--success); }
-  .dot.err { background: var(--danger); }
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
 
-  nav {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    padding: 0 24px;
-    gap: 4px;
-  }
-  nav button {
-    background: none; border: none; cursor: pointer;
-    color: var(--muted); font-size: 14px;
-    padding: 12px 16px;
-    border-bottom: 2px solid transparent;
-    transition: color .15s, border-color .15s;
-  }
-  nav button.active, nav button:hover { color: var(--text); }
-  nav button.active { border-bottom-color: var(--primary); color: var(--primary); }
+/* ── Animated background ── */
+body::before {
+  content: '';
+  position: fixed; inset: 0; z-index: -1;
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(109,74,255,.12) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 90%, rgba(28,196,126,.07) 0%, transparent 70%);
+  pointer-events: none;
+}
 
-  main { max-width: 860px; margin: 0 auto; padding: 28px 24px 60px; }
-  section { display: none; }
-  section.active { display: block; }
+/* ── Header ── */
+header {
+  background: rgba(26,24,48,.9);
+  border-bottom: 1px solid var(--border);
+  padding: 0 28px;
+  display: flex; align-items: center; gap: 14px;
+  height: 58px;
+  position: sticky; top: 0; z-index: 30;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.logo-wrap { display: flex; align-items: center; gap: 10px; }
+.logo-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: linear-gradient(135deg, #6d4aff 0%, #9b6dff 100%);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 18px; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(109,74,255,.4);
+}
+.header-title   { font-weight: 700; font-size: 15px; color: var(--text); }
+.header-subtitle{ font-size: 11px; color: var(--muted); }
+.header-spacer  { flex: 1; }
+.status-pill {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--muted);
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 5px 12px; border-radius: 20px;
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+.dot.ok  { background: var(--success); box-shadow: 0 0 0 3px var(--success-bg); }
+.dot.err { background: var(--danger);  box-shadow: 0 0 0 3px var(--danger-bg); }
 
-  /* ── Components ─────────────────────────────────────────── */
-  .card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 20px 24px; margin-bottom: 16px;
-  }
-  .card-title {
-    font-weight: 600; font-size: 15px; margin-bottom: 4px;
-  }
-  .card-desc { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+/* Settings tab nav (post-setup view) */
+nav {
+  background: rgba(26,24,48,.85);
+  border-bottom: 1px solid var(--border);
+  display: flex; padding: 0 28px; gap: 2px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+nav button {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 13px; font-weight: 500;
+  padding: 14px 16px;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+nav button:hover { color: var(--text2); }
+nav button.active { border-bottom-color: var(--primary); color: var(--primary); }
 
-  fieldset { border: none; }
-  legend {
-    font-size: 13px; font-weight: 600; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .05em;
-    margin-bottom: 12px;
-  }
+main { max-width: 900px; margin: 0 auto; padding: 32px 24px 100px; }
+section { display: none; }
+section.active { display: block; }
 
-  .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
-  .field input[type=text],
-  .field input[type=password],
-  .field input[type=number] {
-    width: 100%; padding: 8px 12px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 6px; color: var(--text); font-size: 14px;
-    outline: none; transition: border-color .15s;
-  }
-  .field input:focus { border-color: var(--primary); }
-  .field .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+/* ── Card ── */
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 24px; margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+.card-title { font-weight: 700; font-size: 15px; color: var(--text); margin-bottom: 4px; }
+.card-desc  { color: var(--muted); font-size: 13px; margin-bottom: 18px; line-height: 1.6; }
 
-  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .row-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px; }
+.section-heading    { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+.section-subheading { font-size: 14px; color: var(--muted); margin-bottom: 28px; }
 
-  /* Buttons */
-  button.btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 16px; border-radius: 6px; border: none;
-    font-size: 14px; font-weight: 500; cursor: pointer;
-    transition: opacity .15s, background .15s;
-  }
-  button.btn:disabled { opacity: .4; cursor: not-allowed; }
-  .btn-primary  { background: var(--primary);  color: #fff; }
-  .btn-primary:hover:not(:disabled) { background: var(--primary-h); }
-  .btn-ghost    { background: var(--surface2); color: var(--text); }
-  .btn-ghost:hover:not(:disabled) { background: var(--border); }
-  .btn-danger   { background: var(--danger);   color: #fff; }
-  .btn-success  { background: var(--success);  color: #fff; }
+fieldset { border: none; }
+legend {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .07em; margin-bottom: 14px;
+}
 
-  .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+/* ── Form fields ── */
+.field { margin-bottom: 18px; }
+.field label {
+  display: block; font-size: 13px; font-weight: 600;
+  color: var(--text2); margin-bottom: 6px;
+}
+.field input[type=text],
+.field input[type=email],
+.field input[type=password],
+.field input[type=number] {
+  width: 100%; padding: 10px 14px;
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); font-size: 14px;
+  outline: none; transition: border-color .15s, box-shadow .15s;
+}
+.field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(109,74,255,.2);
+}
+.field input.invalid { border-color: var(--danger); }
+.field .hint    { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
+.field .err-msg { font-size: 12px; color: var(--danger); margin-top: 5px; display: none; }
+.field.has-error .err-msg   { display: block; }
+.field.has-error input      { border-color: var(--danger); }
 
-  /* Toggle switch */
-  .toggle-wrap {
-    display: flex; align-items: center; gap: 10px; cursor: pointer;
-    user-select: none;
-  }
-  .toggle {
-    position: relative; width: 38px; height: 22px;
-    flex-shrink: 0;
-  }
-  .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
-  .slider {
-    position: absolute; inset: 0; background: var(--surface2);
-    border: 1px solid var(--border); border-radius: 11px;
-    transition: background .2s, border-color .2s;
-  }
-  .slider::before {
-    content: ""; position: absolute;
-    width: 16px; height: 16px; left: 2px; top: 2px;
-    background: var(--muted); border-radius: 50%;
-    transition: transform .2s, background .2s;
-  }
-  .toggle input:checked + .slider { background: var(--primary); border-color: var(--primary); }
-  .toggle input:checked + .slider::before { transform: translateX(16px); background: #fff; }
+/* show/hide password wrapper */
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 42px; }
+.pw-toggle {
+  position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  padding: 3px; display: flex; align-items: center; font-size: 15px;
+  transition: color .15s;
+}
+.pw-toggle:hover { color: var(--text2); }
 
-  /* Preset buttons */
-  .presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
-  .preset-btn {
-    padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border);
-    background: var(--surface2); color: var(--text);
-    font-size: 13px; cursor: pointer; transition: all .15s;
-  }
-  .preset-btn:hover { border-color: var(--primary); color: var(--primary); }
-  .preset-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.row-3 { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 16px; }
 
-  /* Category accordion */
-  .category {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); margin-bottom: 10px; overflow: hidden;
-  }
-  .category-header {
-    display: flex; align-items: center; gap: 12px;
-    padding: 14px 16px; cursor: pointer;
-    transition: background .1s;
-  }
-  .category-header:hover { background: var(--surface2); }
-  .category-header .caret { color: var(--muted); font-size: 12px; transition: transform .2s; }
-  .category-header.open .caret { transform: rotate(90deg); }
-  .category-info { flex: 1; }
-  .category-info .name { font-weight: 600; font-size: 14px; }
-  .category-info .desc { font-size: 12px; color: var(--muted); }
-  .risk-badge {
-    font-size: 11px; font-weight: 600; padding: 2px 8px;
-    border-radius: 10px; text-transform: uppercase; letter-spacing: .04em;
-  }
-  .risk-safe        { background: #1cc47e22; color: var(--success); }
-  .risk-moderate    { background: #f5a62322; color: var(--warn); }
-  .risk-destructive { background: #e8464622; color: var(--danger); }
+/* ── Buttons ── */
+button.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 10px 20px; border-radius: var(--radius-sm); border: none;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  transition: background .15s, transform .1s, box-shadow .15s;
+  line-height: 1; white-space: nowrap;
+}
+button.btn:active:not(:disabled) { transform: scale(.97); }
+button.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn-primary {
+  background: var(--primary); color: #fff;
+  box-shadow: 0 2px 8px rgba(109,74,255,.35);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--primary-h);
+  box-shadow: 0 4px 16px rgba(109,74,255,.5);
+}
+.btn-ghost {
+  background: var(--surface2); color: var(--text2);
+  border: 1.5px solid var(--border);
+}
+.btn-ghost:hover:not(:disabled) { background: var(--surface3); border-color: var(--border2); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled) { background: #c53030; }
+.btn-success { background: var(--success); color: #000; }
+.btn-sm { padding: 7px 14px; font-size: 13px; }
 
-  .category-body { display: none; border-top: 1px solid var(--border); }
-  .category-body.open { display: block; }
+.actions { display: flex; gap: 10px; margin-top: 24px; flex-wrap: wrap; align-items: center; }
 
-  .tool-row {
-    display: flex; align-items: center; gap: 12px;
-    padding: 10px 16px; border-bottom: 1px solid var(--border);
-    transition: background .1s;
-  }
-  .tool-row:last-child { border-bottom: none; }
-  .tool-row:hover { background: var(--surface2); }
-  .tool-name { font-family: monospace; font-size: 13px; flex: 1; }
-  .rate-wrap { display: flex; align-items: center; gap: 6px; }
-  .rate-wrap label { font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .rate-input {
-    width: 72px; padding: 4px 8px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 4px; color: var(--text); font-size: 13px;
-    text-align: center; outline: none;
-  }
-  .rate-input:focus { border-color: var(--primary); }
-  .rate-input:disabled { opacity: .35; }
+/* ── Toggle switch ── */
+.toggle-wrap { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none; }
+.toggle { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.slider {
+  position: absolute; inset: 0;
+  background: var(--border2); border-radius: 11px; transition: background .2s;
+}
+.slider::before {
+  content: ""; position: absolute;
+  width: 16px; height: 16px; left: 3px; top: 3px;
+  background: #fff; border-radius: 50%;
+  transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+.toggle input:checked + .slider { background: var(--primary); }
+.toggle input:checked + .slider::before { transform: translateX(18px); }
+.toggle input:focus-visible + .slider { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-  /* Toast */
-  #toast {
-    position: fixed; bottom: 24px; right: 24px;
-    background: var(--surface); border: 1px solid var(--border);
-    padding: 12px 18px; border-radius: var(--radius);
-    font-size: 14px; max-width: 340px;
-    opacity: 0; transform: translateY(12px);
-    transition: opacity .25s, transform .25s;
-    z-index: 100; pointer-events: none;
-  }
-  #toast.show { opacity: 1; transform: translateY(0); }
-  #toast.ok   { border-color: var(--success); color: var(--success); }
-  #toast.err  { border-color: var(--danger);  color: var(--danger); }
+/* ── Category accordion (Permissions tab) ── */
+.category {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); margin-bottom: 10px; overflow: hidden;
+}
+.category-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 16px; cursor: pointer; transition: background .1s;
+}
+.category-header:hover { background: var(--surface2); }
+.category-header .caret { color: var(--muted); font-size: 12px; transition: transform .2s; }
+.category-header.open .caret { transform: rotate(90deg); }
+.category-info { flex: 1; }
+.category-info .name { font-weight: 600; font-size: 14px; }
+.category-info .desc { font-size: 12px; color: var(--muted); }
+.risk-badge {
+  font-size: 11px; font-weight: 600; padding: 2px 8px;
+  border-radius: 10px; text-transform: uppercase; letter-spacing: .04em;
+}
+.risk-safe        { background: #1cc47e22; color: var(--success); }
+.risk-moderate    { background: #f5a62322; color: var(--warn); }
+.risk-destructive { background: #e8464622; color: var(--danger); }
+.category-body { display: none; border-top: 1px solid var(--border); }
+.category-body.open { display: block; }
+.tool-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.tool-row:last-child { border-bottom: none; }
+.tool-row:hover { background: var(--surface2); }
+.tool-name { font-family: monospace; font-size: 13px; flex: 1; color: var(--text2); }
+.rate-wrap { display: flex; align-items: center; gap: 6px; }
+.rate-wrap label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rate-input {
+  width: 72px; padding: 4px 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 4px; color: var(--text); font-size: 13px;
+  text-align: center; outline: none;
+}
+.rate-input:focus { border-color: var(--primary); }
+.rate-input:disabled { opacity: .35; }
 
-  /* Code block */
-  .code-block {
-    background: #0a0a14; border: 1px solid var(--border);
-    border-radius: 6px; padding: 14px 16px;
-    font-family: monospace; font-size: 12px; line-height: 1.6;
-    overflow-x: auto; white-space: pre;
-    color: #c8c8e8;
-  }
-  .copy-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px;
+  background: var(--surface2); border: 1px solid var(--border);
+  padding: 12px 18px; border-radius: var(--radius);
+  font-size: 14px; max-width: 360px;
+  opacity: 0; transform: translateY(12px);
+  transition: opacity .25s, transform .25s;
+  z-index: 200; pointer-events: none;
+  box-shadow: var(--shadow-md);
+}
+#toast.show { opacity: 1; transform: translateY(0); }
+#toast.ok   { border-color: var(--success); color: var(--success); }
+#toast.err  { border-color: var(--danger);  color: var(--danger); }
 
-  /* Info table */
-  .info-table { width: 100%; border-collapse: collapse; }
-  .info-table td { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-  .info-table td:first-child { color: var(--muted); width: 180px; }
-  .info-table tr:last-child td { border-bottom: none; }
-  .info-table code {
-    background: var(--surface2); padding: 2px 6px; border-radius: 4px;
-    font-family: monospace; font-size: 12px;
-  }
+/* ── Code block ── */
+.code-block {
+  background: #06060f; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  font-family: monospace; font-size: 12px; line-height: 1.7;
+  overflow-x: auto; white-space: pre; color: #b8c4e0;
+}
+.copy-row { display: flex; justify-content: flex-end; margin-top: 8px; }
 
-  .alert {
-    padding: 12px 16px; border-radius: 6px; font-size: 13px;
-    margin-bottom: 14px; display: flex; gap: 10px; align-items: flex-start;
-  }
-  .alert-warn { background: #f5a62318; border: 1px solid #f5a62340; color: var(--warn); }
-  .alert-info { background: #6d4aff18; border: 1px solid #6d4aff40; color: #a090ff; }
+/* ── Info table ── */
+.info-table { width: 100%; border-collapse: collapse; }
+.info-table td { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.info-table td:first-child { color: var(--muted); width: 180px; }
+.info-table tr:last-child td { border-bottom: none; }
+.info-table code {
+  background: var(--surface2); padding: 2px 6px; border-radius: 4px;
+  font-family: monospace; font-size: 12px;
+}
 
-  .spinner {
-    display: inline-block; width: 14px; height: 14px;
-    border: 2px solid rgba(255,255,255,.3); border-top-color: #fff;
-    border-radius: 50%; animation: spin .7s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
+/* ── Alert boxes ── */
+.alert {
+  padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px;
+  margin-bottom: 14px; display: flex; gap: 10px; align-items: flex-start;
+}
+.alert-warn { background: var(--warn-bg);    border: 1px solid #f5a62340; color: var(--warn); }
+.alert-info { background: var(--primary-bg); border: 1px solid #6d4aff40; color: #a080ff; }
 
-  @media (max-width: 600px) {
-    .row-2, .row-3 { grid-template-columns: 1fr; }
-    .presets { flex-direction: column; }
-  }
+/* ── Spinner ── */
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.25); border-top-color: #fff;
+  border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
+}
+.spinner-dark {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid rgba(109,74,255,.25); border-top-color: var(--primary);
+  border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
-  /* ── Escalation Cards ───────────────────────────────────────────── */
-  #escalation-banner {
-    background: #2a1010; border: 2px solid var(--danger);
-    border-radius: var(--radius); padding: 0; margin-bottom: 16px; display: none;
-  }
-  .escalation-banner-title {
-    background: var(--danger); color: #fff; font-weight: 700;
-    padding: 10px 16px; font-size: 14px;
-    display: flex; align-items: center; gap: 8px;
-  }
-  .escalation-card-body { padding: 16px 20px; }
-  .escalation-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-  .escalation-field { margin-bottom: 12px; }
-  .escalation-field label {
-    display: block; font-size: 12px; font-weight: 600;
-    color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
-    margin-bottom: 4px;
-  }
-  .escalation-reason {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 6px; padding: 10px 14px;
-    font-size: 13px; font-style: italic; color: var(--text);
-  }
-  .escalation-preset-row {
-    display: flex; align-items: center; gap: 12px; font-size: 13px;
-  }
-  .preset-badge {
-    padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
-  }
-  .preset-badge.safe       { background: #1cc47e22; color: var(--success); border: 1px solid #1cc47e44; }
-  .preset-badge.moderate   { background: #f5a62322; color: var(--warn);    border: 1px solid #f5a62344; }
-  .preset-badge.high       { background: #e8464622; color: var(--danger);  border: 1px solid #e8464644; }
-  .tool-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .tool-chip-new {
-    background: #6d4aff22; border: 1px solid #6d4aff55;
-    border-radius: 4px; padding: 2px 8px; font-size: 11px;
-    font-family: monospace; color: #a090ff;
-  }
-  .escalation-confirm-wrap { margin-top: 14px; }
-  .escalation-confirm-wrap label {
-    display: block; font-size: 12px; font-weight: 600;
-    color: var(--warn); text-transform: uppercase; letter-spacing: .04em;
-    margin-bottom: 6px;
-  }
-  .escalation-confirm-input {
-    width: 100%; max-width: 280px;
-    padding: 8px 12px; border-radius: 6px;
-    background: var(--surface2); border: 1px solid var(--warn);
-    color: var(--text); font-size: 14px; font-weight: 600; letter-spacing: .08em;
-    outline: none;
-  }
-  .escalation-confirm-input:focus { border-color: var(--danger); }
-  .escalation-actions {
-    display: flex; gap: 10px; margin-top: 14px;
-  }
-  .btn-deny    { background: #e8464622; border: 1px solid var(--danger); color: var(--danger); }
-  .btn-deny:hover    { background: var(--danger); color: #fff; }
-  .btn-approve { background: #1cc47e22; border: 1px solid var(--success); color: var(--success); }
-  .btn-approve:not(:disabled):hover { background: var(--success); color: #000; }
-  .btn-approve:disabled { opacity: .35; cursor: not-allowed; }
-  .escalation-countdown {
-    font-size: 12px; color: var(--muted); align-self: center; margin-left: auto;
-  }
-  .escalation-countdown.urgent { color: var(--danger); font-weight: 600; }
+/* ── Preset buttons (Permissions tab) ── */
+.presets { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.preset-btn {
+  padding: 7px 14px; border-radius: var(--radius-sm); border: 1.5px solid var(--border);
+  background: var(--surface2); color: var(--text2);
+  font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s;
+}
+.preset-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-bg); }
+.preset-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
 
-  /* ── Audit Log ───────────────────────────────────────────────────── */
-  .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  .audit-table th {
-    text-align: left; padding: 6px 10px; color: var(--muted);
-    border-bottom: 1px solid var(--border); font-weight: 600;
-    text-transform: uppercase; letter-spacing: .04em;
-  }
-  .audit-table td { padding: 6px 10px; border-bottom: 1px solid var(--border)22; }
-  .audit-table tr:last-child td { border-bottom: none; }
-  .audit-event-approved { color: var(--success); font-weight: 600; }
-  .audit-event-denied   { color: var(--danger);  font-weight: 600; }
-  .audit-event-expired  { color: var(--muted); }
-  .audit-event-requested { color: var(--warn); }
+/* ── Escalation cards ── */
+#escalation-banner {
+  background: #1e0c0c; border: 2px solid var(--danger);
+  border-radius: var(--radius); padding: 0; margin-bottom: 16px; display: none;
+}
+.escalation-banner-title {
+  background: var(--danger); color: #fff; font-weight: 700;
+  padding: 10px 16px; font-size: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.escalation-card-body { padding: 16px 20px; }
+.escalation-meta { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.escalation-field { margin-bottom: 12px; }
+.escalation-field label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px;
+}
+.escalation-reason {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-xs); padding: 10px 14px;
+  font-size: 13px; font-style: italic; color: var(--text);
+}
+.escalation-preset-row { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+.preset-badge {
+  padding: 2px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+}
+.preset-badge.safe     { background: #1cc47e22; color: var(--success); border: 1px solid #1cc47e44; }
+.preset-badge.moderate { background: #f5a62322; color: var(--warn);    border: 1px solid #f5a62344; }
+.preset-badge.high     { background: #e8464622; color: var(--danger);  border: 1px solid #e8464644; }
+.tool-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tool-chip-new {
+  background: #6d4aff22; border: 1px solid #6d4aff55;
+  border-radius: 4px; padding: 2px 8px; font-size: 11px;
+  font-family: monospace; color: #a090ff;
+}
+.escalation-confirm-wrap { margin-top: 14px; }
+.escalation-confirm-wrap label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: var(--warn); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px;
+}
+.escalation-confirm-input {
+  width: 100%; max-width: 280px;
+  padding: 8px 12px; border-radius: var(--radius-xs);
+  background: var(--surface2); border: 1px solid var(--warn);
+  color: var(--text); font-size: 14px; font-weight: 600; letter-spacing: .08em; outline: none;
+}
+.escalation-confirm-input:focus { border-color: var(--danger); }
+.escalation-actions { display: flex; gap: 10px; margin-top: 14px; }
+.btn-deny    { background: #e8464622; border: 1px solid var(--danger); color: var(--danger); }
+.btn-deny:hover    { background: var(--danger); color: #fff; }
+.btn-approve { background: #1cc47e22; border: 1px solid var(--success); color: var(--success); }
+.btn-approve:not(:disabled):hover { background: var(--success); color: #000; }
+.btn-approve:disabled { opacity: .35; cursor: not-allowed; }
+.escalation-countdown { font-size: 12px; color: var(--muted); align-self: center; margin-left: auto; }
+.escalation-countdown.urgent { color: var(--danger); font-weight: 600; }
 
-  /* ── Setup Wizard ────────────────────────────────────────────────── */
-  #wizard {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.75); backdrop-filter: blur(4px);
-    z-index: 100; align-items: center; justify-content: center; padding: 16px;
-  }
-  .wiz-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; width: 100%; max-width: 560px;
-    max-height: 90vh; overflow-y: auto;
-    padding: 32px 36px 28px;
-    position: relative;
-  }
-  .wiz-close {
-    position: absolute; top: 14px; right: 16px;
-    background: none; border: none; color: var(--muted);
-    font-size: 18px; cursor: pointer; line-height: 1;
-  }
-  .wiz-close:hover { color: var(--text); }
-  .wiz-steps {
-    display: flex; justify-content: center; gap: 8px; margin-bottom: 28px;
-  }
-  .wiz-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--border); transition: background .2s;
-  }
-  .wiz-dot.active { background: var(--primary); }
-  .wiz-dot.done   { background: var(--success); }
-  .wiz-step { display: none; }
-  .wiz-step.active { display: block; }
-  .wiz-title {
-    font-size: 20px; font-weight: 700; margin-bottom: 8px;
-  }
-  .wiz-subtitle {
-    color: var(--muted); font-size: 14px; margin-bottom: 20px; line-height: 1.6;
-  }
-  .wiz-examples {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 14px 16px; margin-bottom: 20px;
-  }
-  .wiz-examples p { font-size: 12px; color: var(--muted); margin-bottom: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
-  .wiz-examples ul { list-style: none; margin: 0; padding: 0; }
-  .wiz-examples li { font-size: 13px; padding: 3px 0; }
-  .wiz-examples li::before { content: '→ '; color: var(--primary); }
-  .wiz-checklist {
-    display: grid; gap: 8px; margin-bottom: 20px;
-  }
-  .wiz-check {
-    display: flex; align-items: center; gap: 10px;
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 6px; padding: 10px 14px; font-size: 13px;
-  }
-  .wiz-check-icon { font-size: 16px; flex-shrink: 0; }
-  .wiz-check-title { font-weight: 600; }
-  .wiz-check-desc  { font-size: 12px; color: var(--muted); margin-top: 1px; }
-  .wiz-actions {
-    display: flex; gap: 10px; margin-top: 24px; align-items: center;
-  }
-  .wiz-actions .spacer { flex: 1; }
-  .wiz-skip { font-size: 13px; color: var(--muted); background: none; border: none; cursor: pointer; text-decoration: underline; }
-  .wiz-skip:hover { color: var(--text); }
-  .wiz-status-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px; border-radius: 6px; font-size: 13px; margin-bottom: 8px;
-    background: var(--surface2); border: 1px solid var(--border);
-  }
-  .wiz-status-label { flex: 1; }
-  .wiz-status-val   { font-weight: 600; }
-  .wiz-ok    { color: var(--success); }
-  .wiz-fail  { color: var(--danger); }
-  .wiz-idle  { color: var(--muted); }
-  .wiz-preset-grid {
-    display: grid; gap: 8px; margin-bottom: 8px;
-  }
-  .wiz-preset-opt {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 12px 14px; border-radius: 8px; cursor: pointer;
-    border: 2px solid var(--border); background: var(--surface2);
-    transition: border-color .15s;
-  }
-  .wiz-preset-opt:has(input:checked) { border-color: var(--primary); background: #6d4aff18; }
-  .wiz-preset-opt input[type=radio] { margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
-  .wiz-preset-name  { font-weight: 600; font-size: 13px; }
-  .wiz-preset-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
-  .wiz-snippet-wrap {
-    background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 8px; padding: 14px;
-    font-family: monospace; font-size: 12px; line-height: 1.7;
-    white-space: pre-wrap; word-break: break-all;
-    max-height: 220px; overflow-y: auto;
-    margin-bottom: 12px;
-  }
-  .wiz-prompts { margin-bottom: 4px; }
-  .wiz-prompts p { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
-  .wiz-prompt-pill {
-    display: inline-block; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 20px; padding: 4px 12px; font-size: 12px; margin: 3px 4px 3px 0;
-    cursor: pointer; transition: border-color .15s;
-  }
-  .wiz-prompt-pill:hover { border-color: var(--primary); }
-  .wiz-path-note { font-size: 12px; color: var(--muted); margin-bottom: 14px; line-height: 1.7; }
+/* ── Audit log ── */
+.audit-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.audit-table th {
+  text-align: left; padding: 6px 10px; color: var(--muted);
+  border-bottom: 1px solid var(--border); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.audit-table td { padding: 6px 10px; border-bottom: 1px solid rgba(48,46,80,.5); }
+.audit-table tr:last-child td { border-bottom: none; }
+.audit-event-approved { color: var(--success); font-weight: 600; }
+.audit-event-denied   { color: var(--danger);  font-weight: 600; }
+.audit-event-expired  { color: var(--muted); }
+.audit-event-requested{ color: var(--warn); }
+
+/* ═══════════════════════════════════════════════════════
+   WIZARD STYLES
+   ═══════════════════════════════════════════════════════ */
+
+/* Wizard takes over the full viewport */
+#wizard-view {
+  min-height: calc(100vh - 58px);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 40px 20px 80px;
+}
+
+.wiz-shell {
+  width: 100%; max-width: 680px;
+}
+
+/* ── Progress bar ── */
+.wiz-progress {
+  display: flex; align-items: center; gap: 0;
+  margin-bottom: 36px; position: relative;
+}
+.wiz-progress::before {
+  content: '';
+  position: absolute; top: 17px; left: 0; right: 0; height: 2px;
+  background: var(--border); z-index: 0;
+}
+.wiz-progress-fill {
+  position: absolute; top: 17px; left: 0; height: 2px;
+  background: var(--primary); z-index: 1;
+  transition: width .4s ease;
+}
+.wiz-step-node {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  flex: 1; position: relative; z-index: 2; cursor: default;
+}
+.wiz-step-circle {
+  width: 34px; height: 34px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700;
+  border: 2px solid var(--border);
+  background: var(--surface2); color: var(--muted);
+  transition: all .3s ease;
+}
+.wiz-step-node.done   .wiz-step-circle { background: var(--success); border-color: var(--success); color: #000; }
+.wiz-step-node.active .wiz-step-circle {
+  background: var(--primary); border-color: var(--primary); color: #fff;
+  box-shadow: 0 0 0 4px rgba(109,74,255,.25);
+}
+.wiz-step-label {
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  white-space: nowrap; transition: color .3s;
+}
+.wiz-step-node.active .wiz-step-label { color: var(--primary); font-weight: 700; }
+.wiz-step-node.done   .wiz-step-label { color: var(--success); }
+
+/* ── Wizard card ── */
+.wiz-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 36px 40px 32px;
+  box-shadow: var(--shadow-lg);
+  position: relative; overflow: hidden;
+}
+.wiz-card::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #6d4aff, #9b6dff, #1cc47e);
+}
+
+/* ── Step transitions ── */
+.wiz-panel { display: none; animation: panelIn .3s ease; }
+.wiz-panel.active { display: block; }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.wiz-title    { font-size: 24px; font-weight: 800; color: var(--text); margin-bottom: 6px; }
+.wiz-subtitle { color: var(--muted); font-size: 14px; margin-bottom: 28px; line-height: 1.7; }
+
+/* ── Welcome step ── */
+.wiz-feature-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px;
+}
+.wiz-feature-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.wiz-feature-icon { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+.wiz-feature-title { font-weight: 600; font-size: 13px; color: var(--text); }
+.wiz-feature-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+
+.wiz-prereqs { margin-bottom: 24px; }
+.wiz-prereqs-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .08em; color: var(--muted); margin-bottom: 10px;
+}
+.wiz-prereq {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  background: var(--surface2); border: 1px solid var(--border);
+  margin-bottom: 8px; font-size: 13px;
+}
+.wiz-prereq-icon { font-size: 16px; flex-shrink: 0; }
+.wiz-prereq-name { font-weight: 600; color: var(--text); }
+.wiz-prereq-desc { font-size: 12px; color: var(--muted); }
+
+/* ── Bridge step ── */
+.conn-test-grid {
+  display: grid; gap: 10px; margin-bottom: 20px;
+}
+.conn-row {
+  background: var(--surface2); border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  transition: border-color .2s;
+}
+.conn-row.ok   { border-color: var(--success); background: var(--success-bg); }
+.conn-row.fail { border-color: var(--danger);  background: var(--danger-bg); }
+.conn-row-icon { font-size: 18px; flex-shrink: 0; }
+.conn-row-label { flex: 1; }
+.conn-row-label strong { display: block; font-size: 13px; font-weight: 600; }
+.conn-row-label span   { font-size: 12px; color: var(--muted); }
+.conn-row-status {
+  font-size: 13px; font-weight: 600; min-width: 100px; text-align: right;
+}
+.conn-row-status.idle { color: var(--muted); }
+.conn-row-status.ok   { color: var(--success); }
+.conn-row-status.fail { color: var(--danger); }
+
+.bridge-hint {
+  padding: 12px 16px; border-radius: var(--radius-sm); font-size: 13px;
+  background: var(--danger-bg); border: 1px solid #e8464640; color: var(--danger);
+  display: none; margin-bottom: 16px;
+}
+.bridge-hint a { color: var(--primary); }
+
+/* ── Auth step ── */
+.cred-storage-options {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  margin-bottom: 20px;
+}
+.cred-opt {
+  padding: 14px 16px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1.5px solid var(--border); background: var(--surface2);
+  transition: border-color .15s;
+  display: flex; align-items: flex-start; gap: 10px;
+}
+.cred-opt input[type=radio] { margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
+.cred-opt:has(input:checked) { border-color: var(--primary); background: var(--primary-bg); }
+.cred-opt-icon  { font-size: 20px; flex-shrink: 0; }
+.cred-opt-name  { font-weight: 600; font-size: 13px; }
+.cred-opt-desc  { font-size: 12px; color: var(--muted); margin-top: 2px; line-height: 1.5; }
+
+/* ── Permissions step ── */
+.perm-preset-grid {
+  display: grid; gap: 10px; margin-bottom: 24px;
+}
+.perm-preset-opt {
+  padding: 16px 18px; border-radius: var(--radius-sm); cursor: pointer;
+  border: 1.5px solid var(--border); background: var(--surface2);
+  transition: border-color .15s, background .15s;
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.perm-preset-opt:has(input:checked) { border-color: var(--primary); background: var(--primary-bg); }
+.perm-preset-opt input[type=radio]  { margin-top: 3px; accent-color: var(--primary); flex-shrink: 0; }
+.perm-preset-badge {
+  width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; font-size: 18px;
+}
+.perm-preset-name { font-weight: 700; font-size: 14px; }
+.perm-preset-desc { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+.perm-preset-tag  {
+  display: inline-block; margin-left: 8px;
+  font-size: 10px; font-weight: 600; padding: 2px 7px;
+  border-radius: 10px; text-transform: uppercase; letter-spacing: .05em; vertical-align: middle;
+}
+.tag-safe { background: var(--success-bg); color: var(--success); }
+.tag-mod  { background: var(--warn-bg); color: var(--warn); }
+.tag-high { background: var(--danger-bg); color: var(--danger); }
+
+/* ── Review step ── */
+.review-grid {
+  display: grid; gap: 12px; margin-bottom: 24px;
+}
+.review-row {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 14px 16px;
+}
+.review-icon { font-size: 18px; flex-shrink: 0; width: 28px; text-align: center; }
+.review-label { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.review-value { font-size: 14px; color: var(--text); font-weight: 500; margin-top: 2px; }
+
+/* ── Done step ── */
+.done-hero {
+  text-align: center; padding: 16px 0 28px;
+}
+.done-checkmark {
+  width: 70px; height: 70px; border-radius: 50%;
+  background: var(--success-bg); border: 2px solid var(--success);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 34px; margin: 0 auto 16px;
+  box-shadow: 0 0 24px rgba(28,196,126,.3);
+  animation: popIn .5s cubic-bezier(.17,.67,.3,1.3);
+}
+@keyframes popIn {
+  from { transform: scale(0); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+.done-title    { font-size: 26px; font-weight: 800; color: var(--text); margin-bottom: 8px; }
+.done-subtitle { font-size: 15px; color: var(--muted); }
+
+.snippet-wrap {
+  background: #06060f; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 16px;
+  font-family: monospace; font-size: 12px; line-height: 1.7;
+  white-space: pre; overflow-x: auto; color: #b8c4e0;
+  margin-bottom: 12px; max-height: 260px; overflow-y: auto;
+}
+.snippet-actions { display: flex; gap: 10px; margin-bottom: 24px; }
+
+.prompt-pills { margin-bottom: 8px; }
+.prompt-pills-title {
+  font-size: 12px; color: var(--muted); font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px;
+}
+.prompt-pill {
+  display: inline-block; background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: 5px 14px; font-size: 12px; margin: 3px 4px 3px 0;
+  cursor: pointer; transition: border-color .15s; color: var(--text2);
+}
+.prompt-pill:hover { border-color: var(--primary); color: var(--primary); }
+
+.config-path-locations {
+  font-size: 12px; color: var(--muted); line-height: 1.9;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 16px; margin-bottom: 24px;
+}
+.config-path-locations strong { color: var(--text2); }
+.config-path-locations code {
+  background: var(--surface3); padding: 1px 5px; border-radius: 3px;
+  font-family: monospace; font-size: 11px;
+}
+
+/* ── Wizard action row ── */
+.wiz-actions {
+  display: flex; gap: 10px; margin-top: 28px; align-items: center;
+}
+.wiz-actions .spacer { flex: 1; }
+.wiz-skip {
+  font-size: 13px; color: var(--muted); background: none; border: none;
+  cursor: pointer; padding: 0; text-decoration: underline;
+}
+.wiz-skip:hover { color: var(--text); }
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .wiz-card                { padding: 24px 20px 20px; }
+  .wiz-feature-grid        { grid-template-columns: 1fr; }
+  .cred-storage-options    { grid-template-columns: 1fr; }
+  .row-2, .row-3           { grid-template-columns: 1fr; }
+  .wiz-step-label          { display: none; }
+  nav                      { overflow-x: auto; }
+}
+
+/* Connection mode buttons */
+.mode-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+.mode-btn {
+  flex: 1; padding: 12px 16px; border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border); background: var(--surface2);
+  color: var(--text2); cursor: pointer; font-size: 13px; font-weight: 600;
+  transition: all .15s; text-align: center;
+}
+.mode-btn:hover { border-color: var(--primary); color: var(--primary); }
+.mode-btn.active { border-color: var(--primary); background: var(--primary-bg); color: var(--primary); }
 </style>
 </head>
 <body>
 
 <header>
-  <span class="logo">✉</span>
-  <span class="header-title">ProtonMail MCP — Settings</span>
+  <div class="logo-wrap">
+    <div class="logo-icon">✉</div>
+    <div>
+      <div class="header-title">ProtonMail MCP</div>
+      <div class="header-subtitle">Settings</div>
+    </div>
+  </div>
+  <div class="header-spacer"></div>
   <div class="status-pill" id="header-status">
     <div class="dot" id="config-dot"></div>
     <span id="config-status-text">Loading…</span>
   </div>
 </header>
 
-<nav>
-  <button class="active" onclick="showTab('setup',this)">⚙ Setup</button>
-  <button onclick="showTab('permissions',this)">🔒 Permissions</button>
-  <button onclick="showTab('status',this)">📊 Status</button>
+<!-- ══ POST-SETUP NAV (hidden until config saved) ══ -->
+<nav id="main-nav" style="display:none">
+  <button class="active" onclick="showTab('setup',this)">Setup</button>
+  <button onclick="showTab('permissions',this)">Permissions</button>
+  <button onclick="showTab('status',this)">Status</button>
 </nav>
 
-<!-- ══════════════════════════════════════════════════ ESCALATION BANNER -->
-<!-- Visible on ALL tabs when a pending escalation exists.              -->
+<!-- ══ ESCALATION BANNER (shown on all views when pending) ══ -->
 <div id="escalation-banner">
   <div class="escalation-banner-title">
     <span>⚠</span>
@@ -587,39 +827,432 @@ function buildHtml(configPath: string, csrfToken: string): string {
   <div id="escalation-cards"></div>
 </div>
 
+<!-- ═══════════════════════════════════════════════
+     WIZARD VIEW  (first-time setup)
+     ═══════════════════════════════════════════════ -->
+<div id="wizard-view">
+  <div class="wiz-shell">
+
+    <!-- Progress bar -->
+    <div class="wiz-progress" id="wiz-progress" role="progressbar" aria-label="Setup progress">
+      <div class="wiz-progress-fill" id="wiz-progress-fill" style="width:0%"></div>
+      <div class="wiz-step-node active" id="wnode-0">
+        <div class="wiz-step-circle">1</div>
+        <div class="wiz-step-label">Welcome</div>
+      </div>
+      <div class="wiz-step-node" id="wnode-1">
+        <div class="wiz-step-circle">2</div>
+        <div class="wiz-step-label">Bridge</div>
+      </div>
+      <div class="wiz-step-node" id="wnode-2">
+        <div class="wiz-step-circle">3</div>
+        <div class="wiz-step-label">Account</div>
+      </div>
+      <div class="wiz-step-node" id="wnode-3">
+        <div class="wiz-step-circle">4</div>
+        <div class="wiz-step-label">Permissions</div>
+      </div>
+      <div class="wiz-step-node" id="wnode-4">
+        <div class="wiz-step-circle">5</div>
+        <div class="wiz-step-label">Review</div>
+      </div>
+      <div class="wiz-step-node" id="wnode-5">
+        <div class="wiz-step-circle">6</div>
+        <div class="wiz-step-label">Done</div>
+      </div>
+    </div>
+
+    <div class="wiz-card">
+
+      <!-- ══ Step 1: Welcome ══ -->
+      <div class="wiz-panel active" id="wpanel-0" role="tabpanel" aria-label="Welcome">
+        <div class="wiz-title">Welcome to ProtonMail MCP</div>
+        <div class="wiz-subtitle">
+          Give Claude secure, permission-controlled access to your ProtonMail inbox
+          via Proton Bridge. Setup takes about 3 minutes.
+        </div>
+
+        <div class="wiz-feature-grid">
+          <div class="wiz-feature-card">
+            <div class="wiz-feature-icon">📖</div>
+            <div>
+              <div class="wiz-feature-title">Read &amp; Search</div>
+              <div class="wiz-feature-desc">Search emails, get summaries, analyse patterns</div>
+            </div>
+          </div>
+          <div class="wiz-feature-card">
+            <div class="wiz-feature-icon">✉</div>
+            <div>
+              <div class="wiz-feature-title">Send &amp; Reply</div>
+              <div class="wiz-feature-desc">Draft, send, and reply to emails on your behalf</div>
+            </div>
+          </div>
+          <div class="wiz-feature-card">
+            <div class="wiz-feature-icon">📁</div>
+            <div>
+              <div class="wiz-feature-title">Organise</div>
+              <div class="wiz-feature-desc">Move, label, archive, and manage folders</div>
+            </div>
+          </div>
+          <div class="wiz-feature-card">
+            <div class="wiz-feature-icon">🔒</div>
+            <div>
+              <div class="wiz-feature-title">Permission Controls</div>
+              <div class="wiz-feature-desc">You choose exactly what Claude is allowed to do</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wiz-prereqs">
+          <div class="wiz-prereqs-title">Before you begin</div>
+          <div class="wiz-prereq">
+            <div class="wiz-prereq-icon">🔒</div>
+            <div>
+              <div class="wiz-prereq-name">Proton Bridge</div>
+              <div class="wiz-prereq-desc">Must be installed, running, and signed in.
+                <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener" style="color:var(--primary)">Download →</a>
+              </div>
+            </div>
+          </div>
+          <div class="wiz-prereq">
+            <div class="wiz-prereq-icon">⬡</div>
+            <div>
+              <div class="wiz-prereq-name">Node.js 20+</div>
+              <div class="wiz-prereq-desc">Check with <code style="background:var(--surface3);padding:1px 5px;border-radius:3px;font-size:11px">node --version</code></div>
+            </div>
+          </div>
+          <div class="wiz-prereq">
+            <div class="wiz-prereq-icon">🤖</div>
+            <div>
+              <div class="wiz-prereq-name">Claude Desktop</div>
+              <div class="wiz-prereq-desc">Or another MCP-compatible host.
+                <a href="https://claude.ai/download" target="_blank" rel="noopener" style="color:var(--primary)">Download →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wiz-actions">
+          <button class="wiz-skip" id="wiz-skip-btn" onclick="openSettingsView()" aria-label="Skip wizard and go to settings">Skip wizard</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" onclick="wizGo(1)" aria-label="Start setup">Get Started →</button>
+        </div>
+      </div>
+
+      <!-- ══ Step 2: Bridge ══ -->
+      <div class="wiz-panel" id="wpanel-1" role="tabpanel" aria-label="Bridge connection">
+        <div class="wiz-title">Proton Bridge</div>
+        <div class="wiz-subtitle">
+          Bridge creates a local SMTP port (1025) and IMAP port (1143) so this server
+          can send and read your encrypted emails — entirely on your machine.<br><br>
+          Make sure Bridge is <strong style="color:var(--text)">open and signed in</strong>, then click Test.
+        </div>
+
+        <div class="conn-test-grid" id="conn-test-grid">
+          <div class="conn-row" id="smtp-row">
+            <div class="conn-row-icon">📤</div>
+            <div class="conn-row-label">
+              <strong>SMTP</strong>
+              <span id="smtp-host-label">localhost:1025</span>
+            </div>
+            <div class="conn-row-status idle" id="smtp-conn-status">—</div>
+          </div>
+          <div class="conn-row" id="imap-row">
+            <div class="conn-row-icon">📥</div>
+            <div class="conn-row-label">
+              <strong>IMAP</strong>
+              <span id="imap-host-label">localhost:1143</span>
+            </div>
+            <div class="conn-row-status idle" id="imap-conn-status">—</div>
+          </div>
+        </div>
+
+        <div class="bridge-hint" id="bridge-hint">
+          One or both ports are not reachable. Make sure Proton Bridge is running and signed in.
+          <a href="https://proton.me/mail/bridge" target="_blank" rel="noopener">Download Bridge →</a>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <div class="field">
+            <label>Bridge TLS certificate path <span style="color:var(--muted);font-weight:400">(optional)</span></label>
+            <input type="text" id="wiz-cert-path" placeholder="/path/to/bridge-cert.crt"
+              aria-label="Bridge TLS certificate path">
+            <div class="hint">Export from Bridge → Settings → Export TLS certificates. Enables proper TLS trust.</div>
+          </div>
+        </div>
+
+        <div class="wiz-actions">
+          <button class="btn btn-ghost" onclick="wizGo(0)" aria-label="Back to Welcome">← Back</button>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost" id="wiz-test-bridge-btn" onclick="wizTestBridge()" aria-label="Test bridge connection">
+            Test Connection
+          </button>
+          <button class="btn btn-primary" id="wiz-bridge-next" onclick="wizGo(2)" aria-label="Continue to Account">
+            Continue →
+          </button>
+        </div>
+      </div>
+
+      <!-- ══ Step 3: Account ══ -->
+      <div class="wiz-panel" id="wpanel-2" role="tabpanel" aria-label="Account credentials">
+        <div class="wiz-title">Connect Your Account</div>
+        <div class="wiz-subtitle">
+          Enter your ProtonMail address and your <strong style="color:var(--text)">Bridge password</strong>
+          — this is shown inside the Proton Bridge app, not your ProtonMail login password.
+        </div>
+
+        <div class="field">
+          <label for="wiz-username">ProtonMail email address</label>
+          <input type="email" id="wiz-username" placeholder="you@proton.me"
+            autocomplete="username" aria-required="true"
+            oninput="wizClearError('wiz-username')">
+          <div class="err-msg" id="err-wiz-username">Please enter your email address.</div>
+        </div>
+
+        <div class="field">
+          <label for="wiz-password">
+            Bridge password
+            <span style="color:var(--muted);font-weight:400">(from the Bridge app)</span>
+          </label>
+          <div class="pw-wrap">
+            <input type="password" id="wiz-password" placeholder="Bridge password"
+              autocomplete="current-password" aria-required="true"
+              oninput="wizClearError('wiz-password')">
+            <button class="pw-toggle" onclick="togglePw('wiz-password',this)" type="button"
+              aria-label="Show/hide password">👁</button>
+          </div>
+          <div class="hint">Bridge app → Settings → IMAP/SMTP → Password</div>
+          <div class="err-msg" id="err-wiz-password">Please enter your Bridge password.</div>
+        </div>
+
+        <div class="field" id="smtp-token-field" style="display:none">
+          <label for="wiz-smtp-token">SMTP token <span style="color:var(--muted);font-weight:400">(required for direct smtp.protonmail.ch)</span></label>
+          <div class="pw-wrap">
+            <input type="password" id="wiz-smtp-token" placeholder="SMTP token from Bridge settings"
+              autocomplete="off" aria-label="SMTP token">
+            <button class="pw-toggle" onclick="togglePw('wiz-smtp-token',this)" type="button"
+              aria-label="Show/hide SMTP token">👁</button>
+          </div>
+          <div class="hint">Required for paid plans using direct smtp.protonmail.ch. Leave blank for Bridge.</div>
+        </div>
+
+        <div class="field" style="margin-top:8px">
+          <label class="toggle-wrap" style="width:fit-content">
+            <span class="toggle">
+              <input type="checkbox" id="wiz-debug">
+              <span class="slider"></span>
+            </span>
+            <span>Enable debug logging</span>
+          </label>
+        </div>
+
+        <div class="wiz-actions">
+          <button class="btn btn-ghost" onclick="wizGo(1)" aria-label="Back to Bridge">← Back</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" onclick="wizSaveCreds()" id="wiz-save-creds-btn"
+            aria-label="Save credentials and continue">
+            Save &amp; Continue →
+          </button>
+        </div>
+      </div>
+
+      <!-- ══ Step 4: Permissions ══ -->
+      <div class="wiz-panel" id="wpanel-3" role="tabpanel" aria-label="Permissions">
+        <div class="wiz-title">Set AI Permissions</div>
+        <div class="wiz-subtitle">
+          Choose how much Claude is allowed to do. You can fine-tune individual tools
+          from the Permissions tab after setup.
+        </div>
+
+        <div class="perm-preset-grid" role="radiogroup" aria-label="Permission preset">
+          <label class="perm-preset-opt">
+            <input type="radio" name="wiz-preset" value="read_only" checked aria-label="Read-Only preset">
+            <div class="perm-preset-badge" style="background:#1cc47e22">📖</div>
+            <div>
+              <div class="perm-preset-name">
+                Read-Only
+                <span class="perm-preset-tag tag-safe">Recommended</span>
+              </div>
+              <div class="perm-preset-desc">Reading, searching, analytics, and connection status only. Cannot send, move, delete, or modify anything. Safest starting point.</div>
+            </div>
+          </label>
+
+          <label class="perm-preset-opt">
+            <input type="radio" name="wiz-preset" value="supervised" aria-label="Supervised preset">
+            <div class="perm-preset-badge" style="background:#f5a62322">👁</div>
+            <div>
+              <div class="perm-preset-name">
+                Supervised
+                <span class="perm-preset-tag tag-mod">Rate limited</span>
+              </div>
+              <div class="perm-preset-desc">All tools enabled with safety caps: deletion at 5/hr, sending at 20/hr, bulk actions at 10/hr.</div>
+            </div>
+          </label>
+
+          <label class="perm-preset-opt">
+            <input type="radio" name="wiz-preset" value="send_only" aria-label="Send-Only preset">
+            <div class="perm-preset-badge" style="background:#6d4aff22">📤</div>
+            <div>
+              <div class="perm-preset-name">Send-Only</div>
+              <div class="perm-preset-desc">Reading and sending only. No deletion, no folder writes, no bulk operations.</div>
+            </div>
+          </label>
+
+          <label class="perm-preset-opt">
+            <input type="radio" name="wiz-preset" value="full" aria-label="Full Access preset">
+            <div class="perm-preset-badge" style="background:#e8464622">⚡</div>
+            <div>
+              <div class="perm-preset-name">
+                Full Access
+                <span class="perm-preset-tag tag-high">No limits</span>
+              </div>
+              <div class="perm-preset-desc">All 47 tools, no rate limits. Grant only when you fully trust the agent to act autonomously.</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="wiz-actions">
+          <button class="btn btn-ghost" onclick="wizGo(2)" aria-label="Back to Account">← Back</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" onclick="wizSavePreset()" id="wiz-apply-preset-btn"
+            aria-label="Apply preset and continue to review">
+            Apply &amp; Continue →
+          </button>
+        </div>
+      </div>
+
+      <!-- ══ Step 5: Review & Save ══ -->
+      <div class="wiz-panel" id="wpanel-4" role="tabpanel" aria-label="Review and save">
+        <div class="wiz-title">Review &amp; Save</div>
+        <div class="wiz-subtitle">
+          Confirm your settings before saving. You can edit any value by going back.
+        </div>
+
+        <div class="review-grid">
+          <div class="review-row">
+            <div class="review-icon">🌉</div>
+            <div>
+              <div class="review-label">Connection</div>
+              <div class="review-value" id="review-connection">—</div>
+            </div>
+          </div>
+          <div class="review-row">
+            <div class="review-icon">👤</div>
+            <div>
+              <div class="review-label">Account</div>
+              <div class="review-value" id="review-account">—</div>
+            </div>
+          </div>
+          <div class="review-row">
+            <div class="review-icon">🔒</div>
+            <div>
+              <div class="review-label">Permission Preset</div>
+              <div class="review-value" id="review-preset">—</div>
+            </div>
+          </div>
+          <div class="review-row">
+            <div class="review-icon">🛡</div>
+            <div>
+              <div class="review-label">Credential Storage</div>
+              <div class="review-value" id="review-storage">Config file (0600)</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wiz-actions">
+          <button class="btn btn-ghost" onclick="wizGo(3)" aria-label="Back to Permissions">← Back</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" onclick="wizFinalSave()" id="wiz-final-save-btn"
+            aria-label="Save configuration">
+            Save Configuration
+          </button>
+        </div>
+      </div>
+
+      <!-- ══ Step 6: Done ══ -->
+      <div class="wiz-panel" id="wpanel-5" role="tabpanel" aria-label="Setup complete">
+        <div class="done-hero">
+          <div class="done-checkmark" aria-hidden="true">✓</div>
+          <div class="done-title">You're all set!</div>
+          <div class="done-subtitle">Add the snippet below to Claude Desktop and restart it.</div>
+        </div>
+
+        <div class="snippet-wrap" id="wiz-snippet" aria-label="Claude Desktop config snippet">Loading…</div>
+        <div class="snippet-actions">
+          <button class="btn btn-ghost btn-sm" onclick="wizCopySnippet()" aria-label="Copy config snippet">
+            Copy Snippet
+          </button>
+        </div>
+
+        <div class="config-path-locations">
+          <strong>Claude Desktop config file location:</strong><br>
+          macOS: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code><br>
+          Windows: <code>%APPDATA%\\Claude\\claude_desktop_config.json</code><br>
+          Linux: <code>~/.config/Claude/claude_desktop_config.json</code>
+        </div>
+
+        <div class="prompt-pills">
+          <div class="prompt-pills-title">Try these prompts in Claude</div>
+          <span class="prompt-pill">"Show my unread emails"</span>
+          <span class="prompt-pill">"What folders do I have?"</span>
+          <span class="prompt-pill">"Check my connection status"</span>
+          <span class="prompt-pill">"Summarise emails from this week"</span>
+          <span class="prompt-pill">"Who do I email most often?"</span>
+        </div>
+
+        <div class="wiz-actions" style="margin-top:20px">
+          <div class="spacer"></div>
+          <button class="btn btn-primary" onclick="openSettingsView()" aria-label="Open settings">
+            Open Settings ↗
+          </button>
+        </div>
+      </div>
+
+    </div><!-- /.wiz-card -->
+  </div><!-- /.wiz-shell -->
+</div><!-- /#wizard-view -->
+
+<!-- ═══════════════════════════════════════════════
+     SETTINGS VIEW  (post-setup / tab-based)
+     ═══════════════════════════════════════════════ -->
+<div id="settings-view" style="display:none">
 <main>
 
-<!-- ══════════════════════════════════════════════════════ SETUP TAB -->
+<!-- ══ SETUP TAB ══ -->
 <section id="setup" class="active">
+  <div class="section-heading">Connection Settings</div>
+  <div class="section-subheading">Configure your Proton Bridge SMTP and IMAP endpoints.</div>
 
   <div class="alert alert-info">
     <span>ℹ</span>
     <span>Credentials are saved to <code id="config-path-setup">${safeConfigPath}</code> (mode 0600).
-    The MCP server reads this file — env vars still override these values when both are set.</span>
+    The MCP server reads this file every 15 s — env vars still override these values when both are set.</span>
   </div>
 
   <div class="card">
     <div class="card-title">Connection Mode</div>
-    <div class="card-desc">Most users run via Proton Bridge (localhost). Direct SMTP requires a paid plan with an SMTP token.</div>
-    <div style="display:flex;gap:10px">
-      <button class="btn btn-primary" id="mode-bridge" onclick="setMode('bridge')">Proton Bridge (localhost)</button>
-      <button class="btn btn-ghost"   id="mode-direct" onclick="setMode('direct')">Direct smtp.protonmail.ch</button>
+    <div class="card-desc">Most users run via Proton Bridge (localhost). Direct SMTP requires a paid plan and SMTP token.</div>
+    <div class="mode-btns">
+      <button class="mode-btn active" id="mode-bridge" onclick="setMode('bridge')">Proton Bridge (localhost)</button>
+      <button class="mode-btn" id="mode-direct" onclick="setMode('direct')">Direct smtp.protonmail.ch</button>
     </div>
   </div>
 
   <form id="setup-form" onsubmit="return false">
-
     <div class="card">
       <fieldset>
         <legend>Account</legend>
         <div class="row-2">
           <div class="field">
-            <label>ProtonMail username / email</label>
-            <input type="text" id="username" placeholder="user@proton.me" autocomplete="username">
+            <label for="username">ProtonMail username / email</label>
+            <input type="email" id="username" placeholder="user@proton.me" autocomplete="username">
           </div>
           <div class="field">
-            <label>Bridge password <span style="color:var(--muted)">(from Bridge app, not login password)</span></label>
-            <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+            <label for="password">Bridge password <span style="color:var(--muted);font-weight:400">(from Bridge app)</span></label>
+            <div class="pw-wrap">
+              <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+              <button class="pw-toggle" onclick="togglePw('password',this)" type="button" aria-label="Show/hide password">👁</button>
+            </div>
             <div class="hint">Leave blank to keep the saved value.</div>
           </div>
         </div>
@@ -631,11 +1264,11 @@ function buildHtml(configPath: string, csrfToken: string): string {
         <legend>SMTP</legend>
         <div class="row-3">
           <div class="field">
-            <label>Host</label>
+            <label for="smtp-host">Host</label>
             <input type="text" id="smtp-host" placeholder="localhost">
           </div>
           <div class="field">
-            <label>Port</label>
+            <label for="smtp-port">Port</label>
             <input type="number" id="smtp-port" min="1" max="65535" placeholder="1025">
           </div>
           <div class="field">
@@ -643,10 +1276,13 @@ function buildHtml(configPath: string, csrfToken: string): string {
             <input type="text" id="smtp-tls" readonly style="color:var(--muted)">
           </div>
         </div>
-        <div class="field" id="smtp-token-field" style="display:none">
-          <label>SMTP token <span style="color:var(--muted)">(required for direct smtp.protonmail.ch)</span></label>
-          <input type="password" id="smtp-token" placeholder="Generated in Settings → IMAP/SMTP → SMTP tokens">
-          <div class="hint">Leave blank to keep the saved value. Requires a paid plan.</div>
+        <div class="field" id="setup-smtp-token-field" style="display:none">
+          <label for="smtp-token">SMTP token <span style="color:var(--muted);font-weight:400">(required for direct)</span></label>
+          <div class="pw-wrap">
+            <input type="password" id="smtp-token" placeholder="Generated in Bridge Settings → IMAP/SMTP">
+            <button class="pw-toggle" onclick="togglePw('smtp-token',this)" type="button" aria-label="Show/hide SMTP token">👁</button>
+          </div>
+          <div class="hint">Leave blank to keep the saved value.</div>
         </div>
       </fieldset>
     </div>
@@ -656,11 +1292,11 @@ function buildHtml(configPath: string, csrfToken: string): string {
         <legend>IMAP</legend>
         <div class="row-3">
           <div class="field">
-            <label>Host</label>
+            <label for="imap-host">Host</label>
             <input type="text" id="imap-host" placeholder="localhost">
           </div>
           <div class="field">
-            <label>Port</label>
+            <label for="imap-port">Port</label>
             <input type="number" id="imap-port" min="1" max="65535" placeholder="1143">
           </div>
           <div class="field"></div>
@@ -672,9 +1308,9 @@ function buildHtml(configPath: string, csrfToken: string): string {
       <fieldset>
         <legend>Bridge TLS Certificate (optional but recommended)</legend>
         <div class="field">
-          <label>Path to exported .crt file</label>
+          <label for="bridge-cert">Path to exported .crt file</label>
           <input type="text" id="bridge-cert" placeholder="/path/to/bridge-cert.crt">
-          <div class="hint">Export from Bridge → Settings → Export TLS certificates. Enables proper TLS trust instead of disabling certificate validation.</div>
+          <div class="hint">Export from Bridge → Settings → Export TLS certificates.</div>
         </div>
         <div class="field" style="margin-top:6px">
           <label class="toggle-wrap" style="width:fit-content">
@@ -690,12 +1326,13 @@ function buildHtml(configPath: string, csrfToken: string): string {
       <button class="btn btn-ghost"   onclick="testConnections()" id="test-btn">Test Connections</button>
       <span id="test-result" style="align-self:center;font-size:13px;color:var(--muted)"></span>
     </div>
-
   </form>
 </section>
 
-<!-- ══════════════════════════════════════════════════════ PERMISSIONS TAB -->
+<!-- ══ PERMISSIONS TAB ══ -->
 <section id="permissions">
+  <div class="section-heading">Permissions</div>
+  <div class="section-subheading">Control which tools Claude can use and at what rate.</div>
 
   <div class="card">
     <div class="card-title">Permission Presets</div>
@@ -705,13 +1342,13 @@ function buildHtml(configPath: string, csrfToken: string): string {
       <button class="preset-btn" data-preset="supervised" onclick="applyPreset('supervised')">Supervised</button>
       <button class="preset-btn" data-preset="send_only"  onclick="applyPreset('send_only')">Send-Only</button>
       <button class="preset-btn" data-preset="read_only"  onclick="applyPreset('read_only')">Read-Only</button>
-      <button class="preset-btn" data-preset="custom"     id="custom-preset-btn" style="display:none">Custom</button>
+      <button class="preset-btn" data-preset="custom" id="custom-preset-btn" style="display:none">Custom</button>
     </div>
     <table style="font-size:12px;color:var(--muted);border-collapse:collapse;width:100%">
-      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Read-Only</td><td>Reading, analytics, and system tools only — no writes of any kind. <strong style="color:#a090ff">Default when no config is saved.</strong></td></tr>
-      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Supervised</td><td>All tools enabled; deletion capped at 5/hr, sending at 20/hr, bulk actions at 10/hr.</td></tr>
-      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Send-Only</td><td>Reading + sending only — no deletion, no folder writes.</td></tr>
-      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Full Access</td><td>All 47 tools enabled, no rate limits. Grant this only when you trust the agent fully.</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Read-Only</td><td>Reading, analytics, and system tools only.</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Supervised</td><td>All tools with rate caps: deletion 5/hr, sending 20/hr, bulk 10/hr.</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Send-Only</td><td>Reading and sending only — no deletion, no folder writes.</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;font-weight:600;color:var(--text)">Full Access</td><td>All tools, no rate limits.</td></tr>
     </table>
   </div>
 
@@ -722,12 +1359,14 @@ function buildHtml(configPath: string, csrfToken: string): string {
   </div>
 </section>
 
-<!-- ══════════════════════════════════════════════════════ STATUS TAB -->
+<!-- ══ STATUS TAB ══ -->
 <section id="status">
+  <div class="section-heading">Status</div>
+  <div class="section-subheading">Server information and connection health.</div>
 
   <div class="card">
     <div class="card-title">Server Information</div>
-    <table class="info-table" id="info-table">
+    <table class="info-table">
       <tr><td>Config file</td><td><code id="info-config-path">${safeConfigPath}</code></td></tr>
       <tr><td>Config exists</td><td id="info-config-exists">—</td></tr>
       <tr><td>Active preset</td><td id="info-preset">—</td></tr>
@@ -738,10 +1377,10 @@ function buildHtml(configPath: string, csrfToken: string): string {
 
   <div class="card">
     <div class="card-title">Claude Desktop Integration</div>
-    <div class="card-desc">Paste this into your <code>claude_desktop_config.json</code> under <code>mcpServers</code>. Env vars override config-file values, so set them here if you prefer not to store credentials in the JSON file.</div>
+    <div class="card-desc">Paste this into your <code>claude_desktop_config.json</code> under <code>mcpServers</code>.</div>
     <pre class="code-block" id="claude-snippet">Loading…</pre>
     <div class="copy-row">
-      <button class="btn btn-ghost" onclick="copySnippet()">Copy</button>
+      <button class="btn btn-ghost btn-sm" onclick="copySnippet()">Copy</button>
     </div>
   </div>
 
@@ -768,22 +1407,19 @@ function buildHtml(configPath: string, csrfToken: string): string {
 
   <div class="card">
     <div class="card-title">Reset</div>
-    <div class="card-desc">Delete the config file and revert to env-var-only mode. The MCP server will allow all tools until a new config is saved.</div>
+    <div class="card-desc">Delete the config file and revert to env-var-only mode.</div>
     <div class="actions" style="margin-top:0">
       <button class="btn btn-danger" onclick="resetConfig()">Reset to Defaults</button>
     </div>
   </div>
 
-  <!-- Audit log -->
   <div class="card">
     <div class="card-title">Escalation Audit Log</div>
     <div class="card-desc">Record of all permission escalation requests and their outcomes.</div>
     <div id="audit-log-wrap">
       <table class="audit-table">
         <thead>
-          <tr>
-            <th>Time</th><th>Event</th><th>From</th><th>To</th><th>Via</th><th>Reason</th>
-          </tr>
+          <tr><th>Time</th><th>Event</th><th>From</th><th>To</th><th>Via</th><th>Reason</th></tr>
         </thead>
         <tbody id="audit-log-body">
           <tr><td colspan="6" style="color:var(--muted);padding:12px 10px">Loading…</td></tr>
@@ -794,216 +1430,52 @@ function buildHtml(configPath: string, csrfToken: string): string {
 
 </section>
 </main>
+</div><!-- /#settings-view -->
 
-<!-- ══════════════════════════════════════════════════════ SETUP WIZARD -->
-<div id="wizard">
-  <div class="wiz-card">
-    <button class="wiz-close" onclick="closeWizard()" title="Skip wizard">✕</button>
-
-    <div class="wiz-steps">
-      <div class="wiz-dot active" id="wdot-0"></div>
-      <div class="wiz-dot" id="wdot-1"></div>
-      <div class="wiz-dot" id="wdot-2"></div>
-      <div class="wiz-dot" id="wdot-3"></div>
-      <div class="wiz-dot" id="wdot-4"></div>
-    </div>
-
-    <!-- Step 0: Welcome -->
-    <div class="wiz-step active" id="wstep-0">
-      <div class="wiz-title">Welcome to ProtonMail MCP</div>
-      <div class="wiz-subtitle">
-        Give Claude AI secure, controlled access to your ProtonMail inbox via Proton Bridge.
-        This wizard takes about 3 minutes to complete.
-      </div>
-      <div class="wiz-examples">
-        <p>What you can ask Claude to do</p>
-        <ul>
-          <li>"Summarise everything from newsletter@example.com this week"</li>
-          <li>"Find all emails about my Acme invoice and draft a reply"</li>
-          <li>"Show me emails I haven't replied to in over 7 days"</li>
-          <li>"What's my average email response time this month?"</li>
-          <li>"Move all order confirmations to the Shopping folder"</li>
-        </ul>
-      </div>
-      <div class="wiz-checklist">
-        <div class="wiz-check">
-          <span class="wiz-check-icon">🔒</span>
-          <div>
-            <div class="wiz-check-title">Proton Bridge</div>
-            <div class="wiz-check-desc">Must be installed, running, and signed in. Runs locally on your machine — your credentials never leave it.</div>
-          </div>
-        </div>
-        <div class="wiz-check">
-          <span class="wiz-check-icon">⬡</span>
-          <div>
-            <div class="wiz-check-title">Node.js 20 or later</div>
-            <div class="wiz-check-desc">Check with <code>node --version</code>. Download from nodejs.org if needed.</div>
-          </div>
-        </div>
-        <div class="wiz-check">
-          <span class="wiz-check-icon">🤖</span>
-          <div>
-            <div class="wiz-check-title">Claude Desktop (or another MCP host)</div>
-            <div class="wiz-check-desc">The app that connects Claude to this server. Download from claude.ai/download.</div>
-          </div>
-        </div>
-      </div>
-      <div class="wiz-actions">
-        <button class="wiz-skip" onclick="closeWizard()">Skip wizard</button>
-        <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="wizGo(1)">Get Started →</button>
-      </div>
-    </div>
-
-    <!-- Step 1: Bridge check -->
-    <div class="wiz-step" id="wstep-1">
-      <div class="wiz-title">Check Proton Bridge</div>
-      <div class="wiz-subtitle">
-        Proton Bridge creates a local SMTP server (port 1025) and IMAP server (port 1143) so
-        this MCP server can send and read your encrypted emails securely on your machine.
-        <br><br>
-        Make sure Bridge is <strong>open and signed in</strong>, then click Check.
-      </div>
-      <div class="wiz-status-row">
-        <span class="wiz-check-icon">📤</span>
-        <span class="wiz-status-label">SMTP localhost:1025</span>
-        <span class="wiz-status-val wiz-idle" id="wiz-smtp-status">—</span>
-      </div>
-      <div class="wiz-status-row">
-        <span class="wiz-check-icon">📥</span>
-        <span class="wiz-status-label">IMAP localhost:1143</span>
-        <span class="wiz-status-val wiz-idle" id="wiz-imap-status">—</span>
-      </div>
-      <div id="wiz-bridge-hint" style="font-size:13px;color:var(--muted);margin-top:10px;display:none">
-        ❌ One or both ports are not reachable. Make sure Proton Bridge is running and signed in.
-        <a href="https://proton.me/mail/bridge" target="_blank" style="color:var(--primary);margin-left:4px">Download Bridge →</a>
-      </div>
-      <div class="wiz-actions">
-        <button class="btn btn-ghost" onclick="wizGo(0)">← Back</button>
-        <div class="spacer"></div>
-        <button class="btn btn-ghost" id="wiz-bridge-check-btn" onclick="wizCheckBridge()">Check Bridge</button>
-        <button class="btn btn-primary" id="wiz-bridge-next" onclick="wizGo(2)" disabled>Continue →</button>
-      </div>
-    </div>
-
-    <!-- Step 2: Account credentials -->
-    <div class="wiz-step" id="wstep-2">
-      <div class="wiz-title">Connect Your Account</div>
-      <div class="wiz-subtitle">
-        Enter your ProtonMail address and your <strong>Bridge password</strong>.
-        The Bridge password is shown inside the Proton Bridge app — it is
-        <em>not</em> your ProtonMail login password.
-      </div>
-      <div class="field">
-        <label>ProtonMail email address</label>
-        <input type="text" id="wiz-username" placeholder="you@proton.me" autocomplete="username">
-      </div>
-      <div class="field">
-        <label>Bridge password <span style="color:var(--muted);font-weight:400">(from the Bridge app)</span></label>
-        <input type="password" id="wiz-password" placeholder="Bridge password" autocomplete="current-password">
-        <div class="hint">Settings → IMAP/SMTP → Password (inside the Proton Bridge desktop app)</div>
-      </div>
-      <div class="wiz-actions">
-        <button class="btn btn-ghost" onclick="wizGo(1)">← Back</button>
-        <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="wizSaveCreds()">Save &amp; Continue →</button>
-      </div>
-    </div>
-
-    <!-- Step 3: Permissions -->
-    <div class="wiz-step" id="wstep-3">
-      <div class="wiz-title">Set AI Permissions</div>
-      <div class="wiz-subtitle">
-        Choose how much Claude is allowed to do. You can change this any time from the
-        Permissions tab.
-      </div>
-      <div class="wiz-preset-grid">
-        <label class="wiz-preset-opt">
-          <input type="radio" name="wiz-preset" value="read_only" checked>
-          <div>
-            <div class="wiz-preset-name">🔍 Read-Only <span style="font-size:11px;color:var(--success);font-weight:400">(recommended to start)</span></div>
-            <div class="wiz-preset-desc">Claude can read emails, search, run analytics, and check connection status. Cannot send, move, delete, or tag anything. Safest starting point.</div>
-          </div>
-        </label>
-        <label class="wiz-preset-opt">
-          <input type="radio" name="wiz-preset" value="supervised">
-          <div>
-            <div class="wiz-preset-name">👁 Supervised</div>
-            <div class="wiz-preset-desc">All tools enabled with rate limits: deletion capped at 5/hr, sending at 20/hr, bulk actions at 10/hr.</div>
-          </div>
-        </label>
-        <label class="wiz-preset-opt">
-          <input type="radio" name="wiz-preset" value="send_only">
-          <div>
-            <div class="wiz-preset-name">📤 Send-Only</div>
-            <div class="wiz-preset-desc">Reading and sending only. No deletion, no folder writes.</div>
-          </div>
-        </label>
-        <label class="wiz-preset-opt">
-          <input type="radio" name="wiz-preset" value="full">
-          <div>
-            <div class="wiz-preset-name">⚡ Full Access</div>
-            <div class="wiz-preset-desc">All 47 tools, no rate limits. Grant only when you fully trust the agent to act autonomously.</div>
-          </div>
-        </label>
-      </div>
-      <div class="wiz-actions">
-        <button class="btn btn-ghost" onclick="wizGo(2)">← Back</button>
-        <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="wizSavePreset()">Apply &amp; Finish →</button>
-      </div>
-    </div>
-
-    <!-- Step 4: Done -->
-    <div class="wiz-step" id="wstep-4">
-      <div class="wiz-title">🎉 All Set!</div>
-      <div class="wiz-subtitle">
-        Add this block to your Claude Desktop config file, then restart Claude Desktop.
-      </div>
-      <pre class="wiz-snippet-wrap" id="wiz-snippet">Loading…</pre>
-      <div class="wiz-path-note">
-        <strong>Config file location:</strong><br>
-        macOS: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code><br>
-        Windows: <code>%APPDATA%\\Claude\\claude_desktop_config.json</code><br>
-        Linux: <code>~/.config/Claude/claude_desktop_config.json</code>
-      </div>
-      <div class="wiz-actions" style="margin-top:0;margin-bottom:20px">
-        <button class="btn btn-ghost" onclick="wizCopySnippet()">📋 Copy snippet</button>
-      </div>
-      <div class="wiz-prompts">
-        <p>Try these prompts in Claude</p>
-        <span class="wiz-prompt-pill">"Show my unread emails"</span>
-        <span class="wiz-prompt-pill">"What folders do I have?"</span>
-        <span class="wiz-prompt-pill">"Check my connection status"</span>
-        <span class="wiz-prompt-pill">"Summarise emails from this week"</span>
-        <span class="wiz-prompt-pill">"Who do I email most often?"</span>
-      </div>
-      <div class="wiz-actions" style="margin-top:24px">
-        <div class="spacer"></div>
-        <button class="btn btn-primary" onclick="closeWizard()">Open Settings ↗</button>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<div id="toast"></div>
+<div id="toast" role="status" aria-live="polite"></div>
 
 <script>
 (function() {
-  // ── Constants ──────────────────────────────────────────────────────────────
-  const ALL_TOOLS = ${toolsJson};
+  // ── Constants ─────────────────────────────────────────────────────────────
+  const ALL_TOOLS  = ${toolsJson};
   const CATEGORIES = ${categoriesJson};
 
-  // ── State ──────────────────────────────────────────────────────────────────
-  let cfg = null;          // last fetched config (with passwords redacted)
-  let toolEnabled = {};    // tool -> bool
-  let toolRate = {};       // tool -> number|null
+  // ── State ─────────────────────────────────────────────────────────────────
+  let cfg         = null;
+  let toolEnabled = {};
+  let toolRate    = {};
 
-  // ── Boot ───────────────────────────────────────────────────────────────────
+  // Wizard in-progress state
+  const W = {
+    smtpHost: 'localhost', smtpPort: 1025,
+    imapHost: 'localhost', imapPort: 1143,
+    certPath: '',
+    username: '', debug: false,
+    preset: 'read_only',
+    bridgeTested: false,
+    credsSaved: false,
+    presetSaved: false,
+  };
+
+  // ── CSRF ──────────────────────────────────────────────────────────────────
+  const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
   window.addEventListener('DOMContentLoaded', async () => {
     buildCategoryUI();
-    await refresh();
+    let st;
+    try { st = await fetch('/api/status').then(r => r.json()); } catch { st = { hasConfig: false }; }
+    if (st.hasConfig) {
+      await refresh();
+      openSettingsView();
+    } else {
+      document.getElementById('wizard-view').style.display = 'flex';
+      document.getElementById('settings-view').style.display = 'none';
+      wizShowStep(0);
+    }
+    loadEscalations();
+    loadAuditLog();
+    setInterval(loadEscalations, 15_000);
   });
 
   async function refresh() {
@@ -1019,24 +1491,279 @@ function buildHtml(configPath: string, csrfToken: string): string {
     }
   }
 
-  // ── Tab switching ──────────────────────────────────────────────────────────
-  window.showTab = function(id, btn) {
-    document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
-    document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-    document.getElementById(id).classList.add('active');
-    btn.classList.add('active');
-    if (id === 'status') populateStatus(cfg);
+  // ── View switching ────────────────────────────────────────────────────────
+  window.openSettingsView = function() {
+    document.getElementById('wizard-view').style.display = 'none';
+    document.getElementById('settings-view').style.display = '';
+    document.getElementById('main-nav').style.display = '';
+    refresh();
   };
 
-  // ── Header status ──────────────────────────────────────────────────────────
+  window.showTab = function(id, btn) {
+    document.querySelectorAll('#settings-view section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('#main-nav button').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+    if (id === 'status') { populateStatus(cfg); loadAuditLog(); }
+  };
+
+  // ── Header status ─────────────────────────────────────────────────────────
   function updateHeaderStatus(ok) {
-    const dot  = document.getElementById('config-dot');
-    const text = document.getElementById('config-status-text');
-    dot.className  = 'dot ' + (ok ? 'ok' : 'err');
-    text.textContent = ok ? 'Config loaded' : 'Not connected';
+    document.getElementById('config-dot').className        = 'dot ' + (ok ? 'ok' : 'err');
+    document.getElementById('config-status-text').textContent = ok ? 'Config loaded' : 'Not connected';
   }
 
-  // ── Setup tab ─────────────────────────────────────────────────────────────
+  // ══ WIZARD LOGIC ══════════════════════════════════════════════════════════
+
+  const STEP_LABELS = ['Welcome','Bridge','Account','Permissions','Review','Done'];
+  const STEP_COUNT  = 6;
+
+  function wizShowStep(n) {
+    // Hide all panels
+    document.querySelectorAll('.wiz-panel').forEach((el, i) => {
+      el.classList.toggle('active', i === n);
+    });
+    // Update nodes
+    for (let i = 0; i < STEP_COUNT; i++) {
+      const node = document.getElementById('wnode-' + i);
+      if (!node) continue;
+      node.className = 'wiz-step-node' +
+        (i === n ? ' active' : i < n ? ' done' : '');
+      node.querySelector('.wiz-step-circle').textContent =
+        i < n ? '✓' : String(i + 1);
+    }
+    // Progress fill
+    const pct = n === 0 ? 0 : Math.round((n / (STEP_COUNT - 1)) * 100);
+    document.getElementById('wiz-progress-fill').style.width = pct + '%';
+    // Focus first focusable element
+    const panel = document.getElementById('wpanel-' + n);
+    if (panel) {
+      const first = panel.querySelector('input:not([disabled]),button:not([disabled])');
+      if (first) setTimeout(() => first.focus(), 80);
+    }
+    // Step-specific setup
+    if (n === 4) wizBuildReview();
+    if (n === 5) wizBuildSnippet();
+  }
+
+  window.wizGo = function(n) { wizShowStep(n); };
+
+  // ── Step 2: Bridge test ───────────────────────────────────────────────────
+  window.wizTestBridge = async function() {
+    const btn  = document.getElementById('wiz-test-bridge-btn');
+    const hint = document.getElementById('bridge-hint');
+    const smtpRow = document.getElementById('smtp-row');
+    const imapRow = document.getElementById('imap-row');
+    const smtpSt  = document.getElementById('smtp-conn-status');
+    const imapSt  = document.getElementById('imap-conn-status');
+    const nextBtn = document.getElementById('wiz-bridge-next');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Testing…';
+    smtpSt.className = 'conn-row-status idle'; smtpSt.textContent = 'Checking…';
+    imapSt.className = 'conn-row-status idle'; imapSt.textContent = 'Checking…';
+    smtpRow.className = 'conn-row'; imapRow.className = 'conn-row';
+
+    // Save cert path
+    W.certPath = document.getElementById('wiz-cert-path').value.trim();
+
+    try {
+      const r = await fetch('/api/test-connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({
+          smtpHost: W.smtpHost, smtpPort: W.smtpPort,
+          imapHost: W.imapHost, imapPort: W.imapPort,
+        }),
+      });
+      const d = await r.json();
+      smtpSt.textContent = d.smtp ? '✅ Reachable' : '❌ Unreachable';
+      smtpSt.className   = 'conn-row-status ' + (d.smtp ? 'ok' : 'fail');
+      imapSt.textContent = d.imap ? '✅ Reachable' : '❌ Unreachable';
+      imapSt.className   = 'conn-row-status ' + (d.imap ? 'ok' : 'fail');
+      smtpRow.className  = 'conn-row ' + (d.smtp ? 'ok' : 'fail');
+      imapRow.className  = 'conn-row ' + (d.imap ? 'ok' : 'fail');
+      const allOk = d.smtp && d.imap;
+      hint.style.display = allOk ? 'none' : '';
+      W.bridgeTested = allOk;
+      nextBtn.disabled = !allOk;
+      if (allOk) nextBtn.classList.add('btn-success');
+    } catch(e) {
+      smtpSt.textContent = imapSt.textContent = 'Error';
+      smtpSt.className = imapSt.className = 'conn-row-status fail';
+      hint.style.display = '';
+    } finally {
+      btn.disabled = false; btn.textContent = 'Test Connection';
+    }
+  };
+
+  // ── Step 3: Credential save ───────────────────────────────────────────────
+  window.wizSaveCreds = async function() {
+    const username = document.getElementById('wiz-username').value.trim();
+    const password = document.getElementById('wiz-password').value;
+    const smtpToken = document.getElementById('wiz-smtp-token').value;
+    const debug     = document.getElementById('wiz-debug').checked;
+
+    let valid = true;
+    if (!username) {
+      setFieldError('wiz-username', 'err-wiz-username', true);
+      valid = false;
+    }
+    if (!password) {
+      setFieldError('wiz-password', 'err-wiz-password', true);
+      valid = false;
+    }
+    if (!valid) return;
+
+    const btn = document.getElementById('wiz-save-creds-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+
+    try {
+      const r = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({
+          connection: {
+            username,
+            password,
+            smtpHost: W.smtpHost, smtpPort: W.smtpPort,
+            imapHost: W.imapHost, imapPort: W.imapPort,
+            bridgeCertPath: W.certPath,
+            smtpToken,
+            debug,
+          },
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      W.username = username;
+      W.debug    = debug;
+      W.credsSaved = true;
+      wizShowStep(3);
+    } catch(e) {
+      toast('Could not save credentials: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save & Continue →';
+    }
+  };
+
+  window.wizClearError = function(id) {
+    const inp = document.getElementById(id);
+    const errId = 'err-' + id;
+    setFieldError(id, errId, false);
+  };
+
+  function setFieldError(inputId, errId, show) {
+    const inp = document.getElementById(inputId);
+    const err = document.getElementById(errId);
+    if (inp) inp.classList.toggle('invalid', show);
+    if (err) err.style.display = show ? 'block' : 'none';
+  }
+
+  // ── Step 4: Preset save ───────────────────────────────────────────────────
+  window.wizSavePreset = async function() {
+    const radio = document.querySelector('input[name="wiz-preset"]:checked');
+    const preset = radio ? radio.value : 'read_only';
+    W.preset = preset;
+
+    const btn = document.getElementById('wiz-apply-preset-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Applying…';
+
+    try {
+      const r = await fetch('/api/preset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
+        body: JSON.stringify({ preset }),
+      });
+      if (!r.ok) throw new Error('Save failed');
+      W.presetSaved = true;
+      wizShowStep(4);
+    } catch(e) {
+      toast('Could not apply preset: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Apply & Continue →';
+    }
+  };
+
+  // ── Step 5: Review ────────────────────────────────────────────────────────
+  function wizBuildReview() {
+    const radio  = document.querySelector('input[name="wiz-preset"]:checked');
+    const preset = radio ? radio.value : W.preset;
+    const username = document.getElementById('wiz-username')?.value.trim() || W.username || '—';
+    const connLabel = W.smtpHost === 'localhost'
+      ? 'Proton Bridge (localhost:' + W.smtpPort + ' / ' + W.imapPort + ')'
+      : 'Direct (smtp.protonmail.ch:' + W.smtpPort + ')';
+
+    document.getElementById('review-connection').textContent = connLabel;
+    document.getElementById('review-account').textContent    = username;
+    document.getElementById('review-preset').textContent     = formatPreset(preset);
+    document.getElementById('review-storage').textContent    = 'Config file (mode 0600)';
+  }
+
+  function formatPreset(p) {
+    return { full:'Full Access', read_only:'Read-Only', supervised:'Supervised',
+             send_only:'Send-Only', custom:'Custom' }[p] || p;
+  }
+
+  // ── Step 5: Final save ────────────────────────────────────────────────────
+  window.wizFinalSave = async function() {
+    const btn = document.getElementById('wiz-final-save-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Saving…';
+    try {
+      // Config was already saved in steps 3 & 4.
+      // Just advance to Done.
+      toast('Configuration saved.', 'ok');
+      wizShowStep(5);
+    } catch(e) {
+      toast('Save failed: ' + e.message, 'err');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Save Configuration';
+    }
+  };
+
+  // ── Step 6: Done ──────────────────────────────────────────────────────────
+  function wizBuildSnippet() {
+    const username = document.getElementById('wiz-username')?.value.trim()
+      || W.username || 'you@proton.me';
+    const snippet = {
+      mcpServers: {
+        protonmail: {
+          command: 'npx',
+          args: ['-y', 'protonmail-mcp-server'],
+          env: {
+            PROTONMAIL_USERNAME: username,
+            PROTONMAIL_PASSWORD: '(your-bridge-password)',
+            PROTONMAIL_SMTP_HOST: W.smtpHost,
+            PROTONMAIL_SMTP_PORT: String(W.smtpPort),
+            PROTONMAIL_IMAP_HOST: W.imapHost,
+            PROTONMAIL_IMAP_PORT: String(W.imapPort),
+            ...(W.certPath ? { PROTONMAIL_BRIDGE_CERT: W.certPath } : {}),
+          },
+        },
+      },
+    };
+    document.getElementById('wiz-snippet').textContent = JSON.stringify(snippet, null, 2);
+  }
+
+  window.wizCopySnippet = function() {
+    const text = document.getElementById('wiz-snippet').textContent;
+    navigator.clipboard.writeText(text).then(() => toast('Copied!', 'ok'));
+  };
+
+  // ── Shared: show/hide password ────────────────────────────────────────────
+  window.togglePw = function(id, btn) {
+    const inp = document.getElementById(id);
+    if (!inp) return;
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁';
+    btn.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  };
+
+  // ══ SETTINGS TAB LOGIC ════════════════════════════════════════════════════
+
   function populateSetup(c) {
     if (!c) return;
     const cn = c.connection || {};
@@ -1047,7 +1774,6 @@ function buildHtml(configPath: string, csrfToken: string): string {
     set('imap-port',   cn.imapPort || 1143);
     set('bridge-cert', cn.bridgeCertPath || '');
     document.getElementById('debug-mode').checked = !!cn.debug;
-    // Detect mode from saved hosts
     const isDirect = (cn.smtpHost || '').includes('protonmail');
     setMode(isDirect ? 'direct' : 'bridge');
     updateTlsLabel();
@@ -1055,9 +1781,9 @@ function buildHtml(configPath: string, csrfToken: string): string {
 
   window.setMode = function(mode) {
     const isBridge = mode === 'bridge';
-    document.getElementById('mode-bridge').className = 'btn ' + (isBridge ? 'btn-primary' : 'btn-ghost');
-    document.getElementById('mode-direct').className = 'btn ' + (!isBridge ? 'btn-primary' : 'btn-ghost');
-    document.getElementById('smtp-token-field').style.display = isBridge ? 'none' : '';
+    document.getElementById('mode-bridge').className = 'mode-btn' + (isBridge ? ' active' : '');
+    document.getElementById('mode-direct').className = 'mode-btn' + (!isBridge ? ' active' : '');
+    document.getElementById('setup-smtp-token-field').style.display = isBridge ? 'none' : '';
     if (isBridge) {
       set('smtp-host', 'localhost'); set('smtp-port', 1025);
       set('imap-host', 'localhost'); set('imap-port', 1143);
@@ -1078,26 +1804,22 @@ function buildHtml(configPath: string, csrfToken: string): string {
     if (e.target.id === 'smtp-port') updateTlsLabel();
   });
 
-  // ── CSRF token — read once at init; included in every mutating fetch call ──
-  const CSRF = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-
   window.saveSetup = async function() {
     const btn = document.getElementById('save-btn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Saving…';
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Saving…';
     try {
       const body = {
         connection: {
-          username:      get('username'),
-          password:      get('password'),     // empty = keep existing
-          smtpHost:      get('smtp-host'),
-          smtpPort:      parseInt(get('smtp-port'), 10),
-          imapHost:      get('imap-host'),
-          imapPort:      parseInt(get('imap-port'), 10),
-          smtpToken:     get('smtp-token'),   // empty = keep existing
+          username:       get('username'),
+          password:       get('password'),
+          smtpHost:       get('smtp-host'),
+          smtpPort:       parseInt(get('smtp-port'), 10),
+          imapHost:       get('imap-host'),
+          imapPort:       parseInt(get('imap-port'), 10),
+          smtpToken:      get('smtp-token'),
           bridgeCertPath: get('bridge-cert'),
-          debug:         document.getElementById('debug-mode').checked,
-        }
+          debug:          document.getElementById('debug-mode').checked,
+        },
       };
       const r = await fetch('/api/config', {
         method: 'POST',
@@ -1117,8 +1839,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
   window.testConnections = async function() {
     const btn = document.getElementById('test-btn');
     const res = document.getElementById('test-result');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>';
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
     res.textContent = 'Testing…';
     try {
       const r = await fetch('/api/test-connection', {
@@ -1127,12 +1848,10 @@ function buildHtml(configPath: string, csrfToken: string): string {
         body: JSON.stringify({
           smtpHost: get('smtp-host'), smtpPort: parseInt(get('smtp-port'), 10),
           imapHost: get('imap-host'), imapPort: parseInt(get('imap-port'), 10),
-        })
+        }),
       });
       const data = await r.json();
-      const smtpOk = data.smtp ? '✅ SMTP' : '❌ SMTP';
-      const imapOk = data.imap ? '✅ IMAP' : '❌ IMAP';
-      res.textContent = smtpOk + '  ' + imapOk;
+      res.textContent = (data.smtp ? '✅ SMTP' : '❌ SMTP') + '  ' + (data.imap ? '✅ IMAP' : '❌ IMAP');
       res.style.color = (data.smtp && data.imap) ? 'var(--success)' : 'var(--danger)';
     } catch(e) {
       res.textContent = 'Error: ' + e.message;
@@ -1142,9 +1861,10 @@ function buildHtml(configPath: string, csrfToken: string): string {
     }
   };
 
-  // ── Permissions tab ────────────────────────────────────────────────────────
+  // ── Permissions tab ───────────────────────────────────────────────────────
   function buildCategoryUI() {
     const container = document.getElementById('categories');
+    if (!container) return;
     for (const [catKey, cat] of Object.entries(CATEGORIES)) {
       const el = document.createElement('div');
       el.className = 'category';
@@ -1152,16 +1872,17 @@ function buildHtml(configPath: string, csrfToken: string): string {
         '<div class="category-header" onclick="toggleCategory(this)">' +
           '<span class="caret">▶</span>' +
           '<div class="category-info">' +
-            '<div class="name">' + cat.label + '</div>' +
-            '<div class="desc">' + cat.description + '</div>' +
+            '<div class="name">' + escHtml(cat.label) + '</div>' +
+            '<div class="desc">' + escHtml(cat.description) + '</div>' +
           '</div>' +
-          '<span class="risk-badge risk-' + cat.risk + '">' + cat.risk + '</span>' +
+          '<span class="risk-badge risk-' + escHtml(cat.risk) + '">' + escHtml(cat.risk) + '</span>' +
           '<label class="toggle-wrap" onclick="event.stopPropagation()">' +
-            '<span class="toggle"><input type="checkbox" id="cat-' + catKey + '" onchange="toggleCategory_all(\'' + catKey + '\',this.checked)"><span class="slider"></span></span>' +
+            '<span class="toggle"><input type="checkbox" id="cat-' + escHtml(catKey) + '" ' +
+              'onchange="toggleCategory_all(\'' + escHtml(catKey) + '\',this.checked)"><span class="slider"></span></span>' +
             '<span style="font-size:12px;color:var(--muted)">All</span>' +
           '</label>' +
         '</div>' +
-        '<div class="category-body" id="body-' + catKey + '">' +
+        '<div class="category-body" id="body-' + escHtml(catKey) + '">' +
           cat.tools.map(t => toolRow(t)).join('') +
         '</div>';
       container.appendChild(el);
@@ -1169,16 +1890,18 @@ function buildHtml(configPath: string, csrfToken: string): string {
   }
 
   function toolRow(tool) {
-    const label = tool.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const label = tool.replace(/_/g,'  ').replace(/\\b\\w/g, c => c.toUpperCase());
     return '<div class="tool-row">' +
-      '<span class="tool-name">' + tool + '</span>' +
-      '<span style="font-size:12px;color:var(--muted);flex:1">' + label + '</span>' +
+      '<span class="tool-name">' + escHtml(tool) + '</span>' +
+      '<span style="font-size:12px;color:var(--muted);flex:1">' + escHtml(label) + '</span>' +
       '<div class="rate-wrap">' +
         '<label>Limit/hr</label>' +
-        '<input class="rate-input" type="number" min="1" max="9999" placeholder="∞" id="rate-' + tool + '" title="Max calls per hour (leave blank for unlimited)">' +
+        '<input class="rate-input" type="number" min="1" max="9999" placeholder="∞" ' +
+          'id="rate-' + escHtml(tool) + '" title="Max calls per hour (blank = unlimited)">' +
       '</div>' +
       '<label class="toggle-wrap">' +
-        '<span class="toggle"><input type="checkbox" id="tool-' + tool + '" onchange="onToolToggle(\'' + tool + '\',this.checked)"><span class="slider"></span></span>' +
+        '<span class="toggle"><input type="checkbox" id="tool-' + escHtml(tool) + '" ' +
+          'onchange="onToolToggle(\'' + escHtml(tool) + '\',this.checked)"><span class="slider"></span></span>' +
       '</label>' +
     '</div>';
   }
@@ -1187,39 +1910,26 @@ function buildHtml(configPath: string, csrfToken: string): string {
     if (!c) return;
     const perms = c.permissions || {};
     const tools = perms.tools || {};
-    // Populate preset buttons
     document.querySelectorAll('.preset-btn').forEach(b => {
       b.classList.toggle('active', b.dataset.preset === perms.preset);
     });
     if (perms.preset === 'custom') {
       document.getElementById('custom-preset-btn').style.display = '';
     }
-    // Populate each tool row
     for (const tool of ALL_TOOLS) {
-      const perm = tools[tool] || { enabled: true, rateLimit: null };
-      const cbEl = document.getElementById('tool-' + tool);
-      const rateEl = document.getElementById('rate-' + tool);
-      if (cbEl) {
-        cbEl.checked = perm.enabled !== false;
-        toolEnabled[tool] = cbEl.checked;
-      }
-      if (rateEl) {
-        rateEl.value = perm.rateLimit != null ? perm.rateLimit : '';
-        rateEl.disabled = !perm.enabled;
-        toolRate[tool] = perm.rateLimit;
-      }
+      const perm  = tools[tool] || { enabled: true, rateLimit: null };
+      const cbEl  = document.getElementById('tool-' + tool);
+      const rateEl= document.getElementById('rate-' + tool);
+      if (cbEl)   { cbEl.checked = perm.enabled !== false; toolEnabled[tool] = cbEl.checked; }
+      if (rateEl) { rateEl.value = perm.rateLimit != null ? perm.rateLimit : ''; rateEl.disabled = !perm.enabled; toolRate[tool] = perm.rateLimit; }
     }
-    // Update category "all" checkboxes
-    for (const catKey of Object.keys(CATEGORIES)) {
-      updateCategoryToggle(catKey);
-    }
+    for (const catKey of Object.keys(CATEGORIES)) { updateCategoryToggle(catKey); }
   }
 
   window.onToolToggle = function(tool, enabled) {
     toolEnabled[tool] = enabled;
     const rateEl = document.getElementById('rate-' + tool);
     if (rateEl) rateEl.disabled = !enabled;
-    // Find parent category and update its master toggle
     for (const [catKey, cat] of Object.entries(CATEGORIES)) {
       if (cat.tools.includes(tool)) { updateCategoryToggle(catKey); break; }
     }
@@ -1239,8 +1949,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
 
   window.toggleCategory = function(header) {
     header.classList.toggle('open');
-    const body = header.nextElementSibling;
-    body.classList.toggle('open');
+    header.nextElementSibling.classList.toggle('open');
   };
 
   function updateCategoryToggle(catKey) {
@@ -1266,23 +1975,20 @@ function buildHtml(configPath: string, csrfToken: string): string {
   };
 
   function markCustomPreset() {
-    // Show "Custom" preset button and deactivate others
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-    const customBtn = document.getElementById('custom-preset-btn');
-    customBtn.style.display = '';
-    customBtn.classList.add('active');
+    const btn = document.getElementById('custom-preset-btn');
+    btn.style.display = ''; btn.classList.add('active');
   }
 
   window.savePermissions = async function() {
     const tools = {};
     for (const tool of ALL_TOOLS) {
-      const cbEl = document.getElementById('tool-' + tool);
-      const rateEl = document.getElementById('rate-' + tool);
-      const enabled = cbEl ? cbEl.checked : true;
-      const rateVal = rateEl && rateEl.value.trim() !== '' ? parseInt(rateEl.value, 10) : null;
+      const cbEl  = document.getElementById('tool-' + tool);
+      const rateEl= document.getElementById('rate-' + tool);
+      const enabled  = cbEl ? cbEl.checked : true;
+      const rateVal  = rateEl && rateEl.value.trim() !== '' ? parseInt(rateEl.value, 10) : null;
       tools[tool] = { enabled, rateLimit: rateVal && rateVal > 0 ? rateVal : null };
     }
-    // Detect preset
     let preset = 'custom';
     document.querySelectorAll('.preset-btn').forEach(b => {
       if (b.classList.contains('active') && b.dataset.preset !== 'custom') preset = b.dataset.preset;
@@ -1292,15 +1998,11 @@ function buildHtml(configPath: string, csrfToken: string): string {
       headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
       body: JSON.stringify({ permissions: { preset, tools } }),
     });
-    if (r.ok) {
-      toast('Permissions saved. Changes take effect within 15 s.', 'ok');
-      await refresh();
-    } else {
-      toast('Save failed.', 'err');
-    }
+    if (r.ok) { toast('Permissions saved. Changes take effect within 15 s.', 'ok'); await refresh(); }
+    else       { toast('Save failed.', 'err'); }
   };
 
-  // ── Status tab ─────────────────────────────────────────────────────────────
+  // ── Status tab ────────────────────────────────────────────────────────────
   function populateStatus(c) {
     if (!c) return;
     const perms = c.permissions || {};
@@ -1308,35 +2010,31 @@ function buildHtml(configPath: string, csrfToken: string): string {
     document.getElementById('info-config-exists').textContent = 'Yes';
     document.getElementById('info-preset').textContent = perms.preset || '—';
     const disabled = ALL_TOOLS.filter(t => tools[t] && !tools[t].enabled);
-    document.getElementById('info-disabled').textContent =
-      disabled.length ? disabled.join(', ') : 'None';
+    document.getElementById('info-disabled').textContent = disabled.length ? disabled.join(', ') : 'None';
     const limited = ALL_TOOLS.filter(t => tools[t] && tools[t].rateLimit != null);
     document.getElementById('info-rate-limited').textContent =
-      limited.length
-        ? limited.map(t => t + ' (' + tools[t].rateLimit + '/hr)').join(', ')
-        : 'None';
+      limited.length ? limited.map(t => t + ' (' + tools[t].rateLimit + '/hr)').join(', ') : 'None';
     buildClaudeSnippet(c.connection || {});
   }
 
   function buildClaudeSnippet(cn) {
     const snippet = {
-      "protonmail": {
-        "command": "node",
-        "args": ["/path/to/protonmail-mcp-server/dist/index.js"],
-        "env": {
-          "PROTONMAIL_USERNAME": cn.username || "your@proton.me",
-          "PROTONMAIL_PASSWORD": "(your Bridge password)",
-          "PROTONMAIL_SMTP_HOST": cn.smtpHost || "localhost",
-          "PROTONMAIL_SMTP_PORT": String(cn.smtpPort || 1025),
-          "PROTONMAIL_IMAP_HOST": cn.imapHost || "localhost",
-          "PROTONMAIL_IMAP_PORT": String(cn.imapPort || 1143),
-          ...(cn.bridgeCertPath ? { "PROTONMAIL_BRIDGE_CERT": cn.bridgeCertPath } : {}),
-          ...(cn.smtpToken      ? { "PROTONMAIL_SMTP_TOKEN": "(your SMTP token)" } : {}),
-        }
-      }
+      protonmail: {
+        command: 'node',
+        args: ['/path/to/protonmail-mcp-server/dist/index.js'],
+        env: {
+          PROTONMAIL_USERNAME: cn.username || 'your@proton.me',
+          PROTONMAIL_PASSWORD: '(your Bridge password)',
+          PROTONMAIL_SMTP_HOST: cn.smtpHost || 'localhost',
+          PROTONMAIL_SMTP_PORT: String(cn.smtpPort || 1025),
+          PROTONMAIL_IMAP_HOST: cn.imapHost || 'localhost',
+          PROTONMAIL_IMAP_PORT: String(cn.imapPort || 1143),
+          ...(cn.bridgeCertPath ? { PROTONMAIL_BRIDGE_CERT: cn.bridgeCertPath } : {}),
+          ...(cn.smtpToken      ? { PROTONMAIL_SMTP_TOKEN:  '(your SMTP token)' } : {}),
+        },
+      },
     };
-    document.getElementById('claude-snippet').textContent =
-      JSON.stringify(snippet, null, 2);
+    document.getElementById('claude-snippet').textContent = JSON.stringify(snippet, null, 2);
   }
 
   window.copySnippet = function() {
@@ -1345,12 +2043,11 @@ function buildHtml(configPath: string, csrfToken: string): string {
   };
 
   window.runStatusCheck = async function() {
-    const btn = document.getElementById('status-check-btn');
-    const res = document.getElementById('status-check-result');
+    const btn     = document.getElementById('status-check-btn');
+    const res     = document.getElementById('status-check-result');
     const results = document.getElementById('connectivity-results');
-    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
-    res.textContent = 'Checking…';
-    results.style.display = 'none';
+    btn.disabled = true; btn.innerHTML = '<span class="spinner-dark"></span>';
+    res.textContent = 'Checking…'; results.style.display = 'none';
     try {
       const c = (cfg && cfg.connection) || {};
       const r = await fetch('/api/test-connection', {
@@ -1359,15 +2056,14 @@ function buildHtml(configPath: string, csrfToken: string): string {
         body: JSON.stringify({
           smtpHost: c.smtpHost || 'localhost', smtpPort: c.smtpPort || 1025,
           imapHost: c.imapHost || 'localhost', imapPort: c.imapPort || 1143,
-        })
+        }),
       });
       const data = await r.json();
       document.getElementById('smtp-check-status').textContent = data.smtp ? '✅ Reachable' : '❌ Unreachable';
       document.getElementById('smtp-check-status').style.color = data.smtp ? 'var(--success)' : 'var(--danger)';
       document.getElementById('imap-check-status').textContent = data.imap ? '✅ Reachable' : '❌ Unreachable';
       document.getElementById('imap-check-status').style.color = data.imap ? 'var(--success)' : 'var(--danger)';
-      results.style.display = '';
-      res.textContent = '';
+      results.style.display = ''; res.textContent = '';
     } catch(e) {
       res.textContent = 'Error: ' + e.message;
     } finally {
@@ -1383,7 +2079,6 @@ function buildHtml(configPath: string, csrfToken: string): string {
   };
 
   // ── Escalation management ─────────────────────────────────────────────────
-
   async function loadEscalations() {
     try {
       const r = await fetch('/api/escalations', { headers: { 'X-CSRF-Token': CSRF } });
@@ -1406,7 +2101,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
     if (!list.length) { banner.style.display = 'none'; cards.innerHTML = ''; return; }
     banner.style.display = '';
     cards.innerHTML = list.map(e => {
-      const newTools = (e.newTools || []);
+      const newTools = e.newTools || [];
       const toolHtml = newTools.length
         ? '<div class="tool-chips">' + newTools.map(t => '<span class="tool-chip-new">' + escHtml(t) + '</span>').join('') + '</div>'
         : '<span style="color:var(--muted);font-size:12px">Rate-limit relaxation only — no new tool types.</span>';
@@ -1422,7 +2117,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
             '<span style="color:var(--muted)">→</span>' +
             '<span class="preset-badge ' + escHtml(riskClass) + '">' + escHtml(e.targetPreset) + '</span>' +
           '</div></div>' +
-        '<div class="escalation-field"><label>New tools that will be enabled (' + newTools.length + ')</label>' + toolHtml + '</div>' +
+        '<div class="escalation-field"><label>New tools (' + newTools.length + ')</label>' + toolHtml + '</div>' +
         '<div class="escalation-confirm-wrap">' +
           '<label>Type APPROVE to enable the button</label>' +
           '<input class="escalation-confirm-input" type="text" id="conf-' + escHtml(e.id) + '" ' +
@@ -1437,8 +2132,6 @@ function buildHtml(configPath: string, csrfToken: string): string {
             formatCountdown(e.expiresAt) + '</span>' +
         '</div></div>';
     }).join('<hr style="border-color:var(--border);margin:0">');
-
-    // Start countdown timers
     for (const e of list) { startCountdown(e.id, e.expiresAt); }
   }
 
@@ -1457,16 +2150,15 @@ function buildHtml(configPath: string, csrfToken: string): string {
         '<td>' + escHtml(e.fromPreset) + '</td>' +
         '<td>' + escHtml(e.toPreset) + '</td>' +
         '<td>' + escHtml(e.via || '—') + '</td>' +
-        '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + escHtml(e.reason || '') + '">' + escHtml((e.reason || '—').slice(0,60)) + '</td>' +
+        '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" ' +
+          'title="' + escHtml(e.reason || '') + '">' + escHtml((e.reason || '—').slice(0,60)) + '</td>' +
       '</tr>';
     }).join('');
   }
 
   function formatCountdown(expiresAt) {
     const secs = Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000));
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return 'Expires in ' + m + ':' + String(s).padStart(2,'0');
+    return 'Expires in ' + Math.floor(secs/60) + ':' + String(secs%60).padStart(2,'0');
   }
 
   const countdownIntervals = {};
@@ -1476,9 +2168,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
       const el = document.getElementById('cd-' + id);
       if (!el) { clearInterval(countdownIntervals[id]); return; }
       const secs = Math.max(0, Math.round((new Date(expiresAt).getTime() - Date.now()) / 1000));
-      const m = Math.floor(secs / 60);
-      const s = secs % 60;
-      el.textContent = 'Expires in ' + m + ':' + String(s).padStart(2,'0');
+      el.textContent = 'Expires in ' + Math.floor(secs/60) + ':' + String(secs%60).padStart(2,'0');
       el.classList.toggle('urgent', secs < 60);
       if (secs === 0) { clearInterval(countdownIntervals[id]); loadEscalations(); }
     }, 1000);
@@ -1501,10 +2191,8 @@ function buildHtml(configPath: string, csrfToken: string): string {
       });
       const d = await r.json();
       if (r.ok) {
-        toast('✅ Escalation approved. New preset: ' + d.preset + '. Takes effect within 15 s.', 'ok');
-        await loadEscalations();
-        await loadAuditLog();
-        await refresh();
+        toast('Escalation approved. New preset: ' + d.preset + '. Takes effect within 15 s.', 'ok');
+        await loadEscalations(); await loadAuditLog(); await refresh();
       } else {
         toast('Error: ' + (d.error || 'Unknown error'), 'err');
       }
@@ -1516,13 +2204,11 @@ function buildHtml(configPath: string, csrfToken: string): string {
   window.denyEscalation = async function(id) {
     try {
       const r = await fetch('/api/escalations/' + id + '/deny', {
-        method: 'POST',
-        headers: { 'X-CSRF-Token': CSRF },
+        method: 'POST', headers: { 'X-CSRF-Token': CSRF },
       });
       if (r.ok) {
         toast('Escalation denied.', 'ok');
-        await loadEscalations();
-        await loadAuditLog();
+        await loadEscalations(); await loadAuditLog();
       } else {
         const d = await r.json();
         toast('Error: ' + (d.error || 'Unknown error'), 'err');
@@ -1532,154 +2218,15 @@ function buildHtml(configPath: string, csrfToken: string): string {
     }
   };
 
-  function escHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  // Poll for pending escalations every 15 s
-  loadEscalations();
-  loadAuditLog();
-  setInterval(loadEscalations, 15_000);
-
-  // Also reload audit log when switching to status tab
-  const origShowTab = window.showTab;
-  window.showTab = function(id, btn) {
-    origShowTab(id, btn);
-    if (id === 'status') loadAuditLog();
-  };
-
-  // ── Setup Wizard ─────────────────────────────────────────────────────────
-  (async function initWizard() {
-    let st;
-    try { st = await fetch('/api/status').then(r => r.json()); } catch { return; }
-    if (st.hasConfig) return; // existing config — skip wizard
-
-    const overlay = document.getElementById('wizard');
-    overlay.style.display = 'flex';
-    let wizStep = 0;
-
-    function wizShowStep(n) {
-      document.querySelectorAll('.wiz-step').forEach((el, i) => {
-        el.classList.toggle('active', i === n);
-      });
-      for (let i = 0; i < 5; i++) {
-        const d = document.getElementById('wdot-' + i);
-        if (!d) continue;
-        d.className = 'wiz-dot' + (i === n ? ' active' : i < n ? ' done' : '');
-      }
-      wizStep = n;
-      if (n === 4) wizBuildSnippet();
-    }
-
-    window.wizGo = function(n) { wizShowStep(n); };
-
-    window.closeWizard = function() {
-      overlay.style.display = 'none';
-      refresh(); // reload config into main UI
-    };
-
-    window.wizCheckBridge = async function() {
-      const btn = document.getElementById('wiz-bridge-check-btn');
-      const smtpEl = document.getElementById('wiz-smtp-status');
-      const imapEl = document.getElementById('wiz-imap-status');
-      const hintEl = document.getElementById('wiz-bridge-hint');
-      const nextBtn = document.getElementById('wiz-bridge-next');
-      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
-      smtpEl.className = 'wiz-status-val wiz-idle'; smtpEl.textContent = 'Checking…';
-      imapEl.className = 'wiz-status-val wiz-idle'; imapEl.textContent = 'Checking…';
-      try {
-        const r = await fetch('/api/test-connection', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-          body: JSON.stringify({ smtpHost: 'localhost', smtpPort: 1025, imapHost: 'localhost', imapPort: 1143 }),
-        });
-        const d = await r.json();
-        smtpEl.textContent = d.smtp ? '✅ Reachable' : '❌ Unreachable';
-        smtpEl.className   = 'wiz-status-val ' + (d.smtp ? 'wiz-ok' : 'wiz-fail');
-        imapEl.textContent = d.imap ? '✅ Reachable' : '❌ Unreachable';
-        imapEl.className   = 'wiz-status-val ' + (d.imap ? 'wiz-ok' : 'wiz-fail');
-        const ok = d.smtp && d.imap;
-        hintEl.style.display = ok ? 'none' : '';
-        nextBtn.disabled = !ok;
-      } catch(e) {
-        smtpEl.textContent = 'Error'; imapEl.textContent = 'Error';
-        smtpEl.className = imapEl.className = 'wiz-status-val wiz-fail';
-        hintEl.style.display = '';
-      } finally {
-        btn.disabled = false; btn.textContent = 'Check Bridge';
-      }
-    };
-
-    window.wizSaveCreds = async function() {
-      const username = document.getElementById('wiz-username').value.trim();
-      const password = document.getElementById('wiz-password').value;
-      if (!username) { toast('Please enter your email address.', 'err'); return; }
-      if (!password) { toast('Please enter your Bridge password.', 'err'); return; }
-      try {
-        const r = await fetch('/api/config', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-          body: JSON.stringify({
-            connection: {
-              username,
-              password,
-              smtpHost: 'localhost', smtpPort: 1025,
-              imapHost: 'localhost', imapPort: 1143,
-            },
-          }),
-        });
-        if (!r.ok) throw new Error('Save failed');
-        wizShowStep(3);
-      } catch(e) {
-        toast('Could not save credentials: ' + e.message, 'err');
-      }
-    };
-
-    window.wizSavePreset = async function() {
-      const radio = document.querySelector('input[name="wiz-preset"]:checked');
-      const preset = radio ? radio.value : 'read_only';
-      try {
-        const r = await fetch('/api/preset', {
-          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-          body: JSON.stringify({ preset }),
-        });
-        if (!r.ok) throw new Error('Save failed');
-        wizShowStep(4);
-      } catch(e) {
-        toast('Could not apply preset: ' + e.message, 'err');
-      }
-    };
-
-    function wizBuildSnippet() {
-      const username = document.getElementById('wiz-username')?.value || 'you@proton.me';
-      const snippet = {
-        mcpServers: {
-          protonmail: {
-            command: 'npx',
-            args: ['-y', 'protonmail-mcp-server'],
-            env: {
-              PROTONMAIL_USERNAME: username,
-              PROTONMAIL_PASSWORD: '(your-bridge-password)',
-              PROTONMAIL_SMTP_HOST: 'localhost',
-              PROTONMAIL_SMTP_PORT: '1025',
-              PROTONMAIL_IMAP_HOST: 'localhost',
-              PROTONMAIL_IMAP_PORT: '1143',
-            },
-          },
-        },
-      };
-      document.getElementById('wiz-snippet').textContent = JSON.stringify(snippet, null, 2);
-    }
-
-    window.wizCopySnippet = function() {
-      const text = document.getElementById('wiz-snippet').textContent;
-      navigator.clipboard.writeText(text).then(() => toast('Copied!', 'ok'));
-    };
-
-    wizShowStep(0);
-  })();
-
-  // ── Utilities ──────────────────────────────────────────────────────────────
+  // ── Utilities ─────────────────────────────────────────────────────────────
   function get(id) { return document.getElementById(id)?.value ?? ''; }
   function set(id, v) { const el = document.getElementById(id); if (el) el.value = v; }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  }
 
   let toastTimer;
   function toast(msg, type) {
@@ -1689,6 +2236,7 @@ function buildHtml(configPath: string, csrfToken: string): string {
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => { el.className = ''; }, 3500);
   }
+
 })();
 </script>
 </body>
