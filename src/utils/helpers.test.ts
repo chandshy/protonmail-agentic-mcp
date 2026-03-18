@@ -1653,4 +1653,177 @@ describe('helpers', () => {
       expect(isNonNumericDays(0)).toBe(false);
     });
   });
+
+  // ── get_emails / search_emails 'limit' type guard (Cycle #25) ────────────
+  // Both handlers now have: if (args.limit !== undefined && typeof args.limit !== "number")
+  //   throw McpError(InvalidParams, "'limit' must be a number.")
+  // This mirrors what was added to get_contacts (Cycle #24) and ensures a
+  // non-numeric string like "abc" does not produce NaN inside Math.max/min.
+
+  describe("get_emails / search_emails 'limit' type guard", () => {
+    // Replicates: args.limit !== undefined && typeof args.limit !== "number"
+    // Returns true → guard triggers → McpError(InvalidParams) thrown.
+    const isNonNumericLimit = (v: unknown): boolean =>
+      v !== undefined && typeof v !== 'number';
+
+    it('undefined is accepted (handler uses default 50)', () => {
+      expect(isNonNumericLimit(undefined)).toBe(false);
+    });
+
+    it('integer 50 is accepted', () => {
+      expect(isNonNumericLimit(50)).toBe(false);
+    });
+
+    it('integer 1 is accepted', () => {
+      expect(isNonNumericLimit(1)).toBe(false);
+    });
+
+    it('integer 200 is accepted (upper clamping boundary)', () => {
+      expect(isNonNumericLimit(200)).toBe(false);
+    });
+
+    it('float 25.5 is accepted (handler clamps via Math.max/min)', () => {
+      expect(isNonNumericLimit(25.5)).toBe(false);
+    });
+
+    it('string "50" triggers guard', () => {
+      expect(isNonNumericLimit('50')).toBe(true);
+    });
+
+    it('string "abc" triggers guard (would produce NaN without the guard)', () => {
+      expect(isNonNumericLimit('abc')).toBe(true);
+    });
+
+    it('null triggers guard', () => {
+      expect(isNonNumericLimit(null)).toBe(true);
+    });
+
+    it('boolean true triggers guard', () => {
+      expect(isNonNumericLimit(true)).toBe(true);
+    });
+
+    it('array [50] triggers guard', () => {
+      expect(isNonNumericLimit([50])).toBe(true);
+    });
+
+    it('object {} triggers guard', () => {
+      expect(isNonNumericLimit({})).toBe(true);
+    });
+  });
+
+  // ── search_emails dateFrom/dateTo cross-validation (Cycle #25) ────────────
+  // Guard: when both dateFrom and dateTo are provided and parseable,
+  //   Date.parse(dateFrom) > Date.parse(dateTo) → throw McpError(InvalidParams)
+  // This catches logically inverted date ranges before sending them to IMAP.
+
+  describe("search_emails 'dateFrom' / 'dateTo' cross-validation", () => {
+    // Replicates the guard logic in the handler:
+    //   if (args.dateFrom && args.dateTo) {
+    //     const dfTs = Date.parse(dateFrom); const dtTs = Date.parse(dateTo);
+    //     if (!isNaN(dfTs) && !isNaN(dtTs) && dfTs > dtTs) throw McpError(...)
+    //   }
+    function isInvalidDateRange(dateFrom: string, dateTo: string): boolean {
+      const dfTs = Date.parse(dateFrom);
+      const dtTs = Date.parse(dateTo);
+      return !isNaN(dfTs) && !isNaN(dtTs) && dfTs > dtTs;
+    }
+
+    it('dateFrom earlier than dateTo is valid (returns false)', () => {
+      expect(isInvalidDateRange('2024-01-01', '2024-12-31')).toBe(false);
+    });
+
+    it('dateFrom equal to dateTo is valid (same-day range)', () => {
+      expect(isInvalidDateRange('2024-06-15', '2024-06-15')).toBe(false);
+    });
+
+    it('ISO datetime dateFrom earlier than dateTo is valid', () => {
+      expect(isInvalidDateRange('2024-03-01T00:00:00Z', '2024-03-31T23:59:59Z')).toBe(false);
+    });
+
+    it('dateFrom later than dateTo is invalid (returns true)', () => {
+      expect(isInvalidDateRange('2024-12-31', '2024-01-01')).toBe(true);
+    });
+
+    it('dateFrom in December later than dateTo in January is invalid', () => {
+      expect(isInvalidDateRange('2024-12-01T12:00:00Z', '2024-01-01T00:00:00Z')).toBe(true);
+    });
+
+    it('unparseable dateFrom does not trigger guard (NaN check prevents it)', () => {
+      expect(isInvalidDateRange('not-a-date', '2024-01-01')).toBe(false);
+    });
+
+    it('unparseable dateTo does not trigger guard', () => {
+      expect(isInvalidDateRange('2024-01-01', 'not-a-date')).toBe(false);
+    });
+
+    it('both unparseable: guard does not trigger', () => {
+      expect(isInvalidDateRange('garbage', 'garbage')).toBe(false);
+    });
+  });
+
+  // ── download_attachment attachment_index upper bound (Cycle #25) ──────────
+  // Guard added: if (rawAttIdx > MAX_ATTACHMENT_INDEX) throw McpError(InvalidParams)
+  // MAX_ATTACHMENT_INDEX = 50. Prevents absurdly large index values that would
+  // cause the IMAP service to scan past all real attachment slots.
+
+  describe("download_attachment 'attachment_index' upper bound guard", () => {
+    const MAX_ATTACHMENT_INDEX = 50;
+
+    // Replicates combined guard:
+    //   !Number.isInteger(v) || v < 0  → existing guard
+    //   v > MAX_ATTACHMENT_INDEX        → new upper-bound guard
+    function isInvalidAttIndex(v: unknown): boolean {
+      if (!Number.isInteger(v) || (v as number) < 0) return true;
+      if ((v as number) > MAX_ATTACHMENT_INDEX) return true;
+      return false;
+    }
+
+    it('index 0 is valid (first attachment)', () => {
+      expect(isInvalidAttIndex(0)).toBe(false);
+    });
+
+    it('index 1 is valid', () => {
+      expect(isInvalidAttIndex(1)).toBe(false);
+    });
+
+    it('index 50 is valid (at the limit)', () => {
+      expect(isInvalidAttIndex(50)).toBe(false);
+    });
+
+    it('index 25 is valid (mid-range)', () => {
+      expect(isInvalidAttIndex(25)).toBe(false);
+    });
+
+    it('index 51 triggers upper-bound guard', () => {
+      expect(isInvalidAttIndex(51)).toBe(true);
+    });
+
+    it('index 100 triggers upper-bound guard', () => {
+      expect(isInvalidAttIndex(100)).toBe(true);
+    });
+
+    it('index 999999 triggers upper-bound guard', () => {
+      expect(isInvalidAttIndex(999999)).toBe(true);
+    });
+
+    it('index -1 triggers existing lower-bound guard', () => {
+      expect(isInvalidAttIndex(-1)).toBe(true);
+    });
+
+    it('float 1.5 triggers existing integer guard', () => {
+      expect(isInvalidAttIndex(1.5)).toBe(true);
+    });
+
+    it('NaN triggers existing integer guard', () => {
+      expect(isInvalidAttIndex(NaN)).toBe(true);
+    });
+
+    it('string "0" triggers existing integer guard (wrong type)', () => {
+      expect(isInvalidAttIndex('0')).toBe(true);
+    });
+
+    it('undefined triggers existing integer guard', () => {
+      expect(isInvalidAttIndex(undefined)).toBe(true);
+    });
+  });
 });

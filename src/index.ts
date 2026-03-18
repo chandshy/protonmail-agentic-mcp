@@ -1709,6 +1709,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         // Validate folder before passing to IMAP — prevents path traversal (e.g. ../../etc).
         const geValidErr = validateTargetFolder(folder);
         if (geValidErr) throw new McpError(ErrorCode.InvalidParams, geValidErr);
+        // Validate limit type — a string "50" coerces safely in Math.max but "abc"
+        // would produce NaN and reach the IMAP service unclamped.
+        if (args.limit !== undefined && typeof args.limit !== "number") {
+          throw new McpError(ErrorCode.InvalidParams, "'limit' must be a number.");
+        }
         const limit = Math.min(Math.max(1, (args.limit as number) || 50), 200);
 
         // Decode cursor for offset, or start at 0
@@ -1770,6 +1775,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         if (args.subject && (args.subject as string).length > MAX_SEARCH_TEXT) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' filter must not exceed ${MAX_SEARCH_TEXT} characters.`);
+        }
+        // Validate limit type — same guard as get_emails: a non-numeric value would
+        // produce NaN and bypass clamping, reaching the IMAP service unchecked.
+        if (args.limit !== undefined && typeof args.limit !== "number") {
+          throw new McpError(ErrorCode.InvalidParams, "'limit' must be a number.");
+        }
+        // Cross-validate date range: dateFrom must not be later than dateTo.
+        // Both are optional; validate only when both are present and parseable.
+        if (args.dateFrom && args.dateTo) {
+          const dfTs = Date.parse(args.dateFrom as string);
+          const dtTs = Date.parse(args.dateTo as string);
+          if (!isNaN(dfTs) && !isNaN(dtTs) && dfTs > dtTs) {
+            throw new McpError(ErrorCode.InvalidParams, "'dateFrom' must not be later than 'dateTo'.");
+          }
         }
         const results = await imapService.searchEmails({
           folder: folders ? undefined : folder,
@@ -1930,8 +1949,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "download_attachment": {
         const rawAttEmailId = requireNumericEmailId(args.email_id, "email_id");
         const rawAttIdx = args.attachment_index as number;
+        // Max reasonable attachment count per email. Rejects absurdly large indices
+        // that could cause the IMAP service to iterate gigantic attachment lists.
+        const MAX_ATTACHMENT_INDEX = 50;
         if (!Number.isInteger(rawAttIdx) || rawAttIdx < 0) {
           throw new McpError(ErrorCode.InvalidParams, "attachment_index must be a non-negative integer.");
+        }
+        if (rawAttIdx > MAX_ATTACHMENT_INDEX) {
+          throw new McpError(ErrorCode.InvalidParams, `attachment_index must be at most ${MAX_ATTACHMENT_INDEX}.`);
         }
         const attResult = await imapService.downloadAttachment(rawAttEmailId, rawAttIdx);
         if (!attResult) {
