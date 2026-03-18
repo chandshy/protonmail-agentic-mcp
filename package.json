@@ -68,10 +68,10 @@
     "win32"
   ],
   "dependencies": {
-    "@modelcontextprotocol/sdk": ">=1.20.1",
-    "imapflow": "^1.0.164",
-    "mailparser": "^3.7.1",
-    "nodemailer": "^6.9.15"
+    "@modelcontextprotocol/sdk": "~1.20.1",
+    "imapflow": "~1.1.0",
+    "mailparser": "~3.7.5",
+    "nodemailer": "~6.10.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

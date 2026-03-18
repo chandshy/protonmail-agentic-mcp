@@ -1895,7 +1895,7 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
           return;
         }
         const current = loadConfig() ?? defaultConfig();
-        current.permissions = buildPermissions(preset as any);
+        current.permissions = buildPermissions(preset as PermissionPreset);
         saveConfig(current);
         json(res, 200, { ok: true });
         return;

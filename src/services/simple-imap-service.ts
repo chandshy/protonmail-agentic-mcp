@@ -112,8 +112,8 @@ export class SimpleIMAPService {
             tlsOptions = { ca: [bridgeCert], minVersion: 'TLSv1.2' };
             logger.info('IMAP: Using exported Bridge certificate for TLS trust', 'IMAPService');
           } catch (err) {
-            logger.warn(
-              'IMAP: Failed to load Bridge cert — falling back to rejectUnauthorized:false (set PROTONMAIL_BRIDGE_CERT to fix)',
+            logger.error(
+              `IMAP: Failed to load Bridge cert at "${bridgeCertPath}" — file may not exist or is unreadable. Falling back to rejectUnauthorized:false. Fix the PROTONMAIL_BRIDGE_CERT path.`,
               'IMAPService',
               err
             );

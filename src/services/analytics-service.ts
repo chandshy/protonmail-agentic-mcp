@@ -324,7 +324,7 @@ export class AnalyticsService {
         totalAttachments += email.attachments.length;
         for (const att of email.attachments) {
           totalSizeBytes += att.size;
-          const type = att.contentType.split('/')[0] || 'other';
+          const type = att.contentType?.split('/')[0] || 'other';
           typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
         }
       }

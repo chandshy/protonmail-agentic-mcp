@@ -87,12 +87,15 @@ export class RateLimiter {
     times.push(now);
 
     // Enforce the per-instance key cap before inserting a brand-new key.
-    // If we are at the limit and this is a new key, evict the stalest bucket
-    // (the first key in Map insertion order on V8) to bound memory usage
-    // between the periodic eviction sweeps.
-    if (!this.buckets.has(key) && this.buckets.size >= MAX_RATE_LIMIT_BUCKETS) {
-      const oldestKey = this.buckets.keys().next().value;
-      if (oldestKey !== undefined) this.buckets.delete(oldestKey);
+    // Run eviction first to clear stale buckets, then check the cap.
+    if (!this.buckets.has(key)) {
+      if (this.buckets.size >= MAX_RATE_LIMIT_BUCKETS) {
+        this.evict();
+      }
+      if (this.buckets.size >= MAX_RATE_LIMIT_BUCKETS) {
+        const oldestKey = this.buckets.keys().next().value;
+        if (oldestKey !== undefined) this.buckets.delete(oldestKey);
+      }
     }
 
     this.buckets.set(key, times);
