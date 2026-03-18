@@ -4,6 +4,38 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #28 — body empty-string guards, priority enum validation, saveDraft inReplyTo sanitization
+**Timestamp:** 2026-03-18
+**Branch:** main
+
+### Audit Highlights
+
+**Build & Tests (pre-work):** Clean build, 589/589 tests passing.
+
+**New Findings (all corrected this cycle):**
+
+1. **`send_email` / `schedule_email` — `body` field has no empty-string guard** — `reply_to_email` received an empty-body guard in Cycle #23, but `send_email` and `schedule_email` forwarded `args.body as string` directly to the SMTP service without any emptiness check. An empty or whitespace-only body would silently send/schedule a blank email — almost always a caller error. Added guard `!args.body || typeof args.body !== "string" || !(args.body).trim()` → `McpError(InvalidParams, "'body' must be a non-empty string.")` in both handlers, consistent with `reply_to_email`.
+
+2. **`save_draft` — `body` field has no empty-string guard (optional variant)** — `save_draft` accepts `body` as an optional field (a draft may be saved without a body). However when a caller explicitly provides `body: ""` or `body: "  "`, this was silently passed to nodemailer as an empty string. Added guard: `if (args.body !== undefined && (typeof args.body !== "string" || !(args.body).trim())) throw McpError(InvalidParams, "'body' must be a non-empty string when provided.")`. This allows omitting `body` entirely while rejecting an explicitly blank value.
+
+3. **`send_email` / `schedule_email` — `priority` field has no runtime enum validation** — The inputSchema declares `enum: ["high", "normal", "low"]` for `priority`, but the handler cast the value directly as `"high" | "normal" | "low" | undefined` with no runtime check. An LLM caller supplying `priority: "urgent"` or `priority: "HIGH"` would silently pass an invalid string to nodemailer's `priority` field, which would misset the `X-Priority` header. Added a `VALID_PRIORITIES = new Set(["high", "normal", "low"])` guard in `send_email` (reused constant) and an inline `new Set(...)` check in `schedule_email`, both returning `McpError(InvalidParams)` for out-of-enum values.
+
+4. **`saveDraft` `inReplyTo` — not CRLF-sanitized in the IMAP service path** — In `smtp-service.ts`, `inReplyTo` is sanitized via `stripHeaderInjection()` which removes CRLF and NUL before passing to nodemailer. However in `simple-imap-service.ts` `saveDraft()`, `options.inReplyTo` was passed raw to nodemailer at line 795 with no sanitization. A crafted value like `"<id>\r\nBcc: evil@x.com"` could inject an additional MIME header line into a saved draft. The `references` field on line 796 already stripped control chars — `inReplyTo` was the sole gap. Added: `options.inReplyTo ? options.inReplyTo.replace(/[\r\n\x00]/g, "") : undefined` to match the SMTP service behaviour.
+
+### Changes
+
+- `src/index.ts`: Added `body` empty-string guard in `send_email` (4 lines). Added `VALID_PRIORITIES` set and priority enum guard in `send_email` (5 lines). Added `body` empty-string guard in `save_draft` (4 lines, optional variant). Added `body` empty-string guard in `schedule_email` (4 lines). Added inline priority enum guard in `schedule_email` (3 lines).
+- `src/services/simple-imap-service.ts`: Added CRLF/NUL strip for `inReplyTo` in `saveDraft()` (3 lines, comment + code).
+- `src/utils/helpers.test.ts`: Added 37 new tests covering all four new guard paths: `send_email`/`schedule_email` body guard (11 tests), `save_draft` body guard (7 tests), priority enum guard (10 tests), `saveDraft` inReplyTo sanitization (9 tests).
+
+### Test Results
+
+**Before:** 589 tests passing
+**After:** 626 tests passing (+37)
+**Build:** Clean (0 TypeScript errors)
+
+---
+
 ## Cycle #27 — get_emails_by_label / sync_emails 'limit' type guards
 **Timestamp:** 2026-03-18
 **Branch:** main

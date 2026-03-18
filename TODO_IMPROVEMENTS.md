@@ -1,6 +1,6 @@
 # TODO Improvements — Prioritized Backlog
 
-Last updated: Cycle #27 (2026-03-18)
+Last updated: Cycle #28 (2026-03-18)
 
 ---
 
@@ -286,4 +286,20 @@ The handler used `(args.limit as number) || 50` without checking `typeof args.li
 ### [DONE - Cycle 27] `sync_emails` — `limit` parameter no runtime type guard
 Same NaN-propagation issue: `(args.limit as number) || 100` inside Math.min/max without a type check. Added the same guard pattern.
 
-IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 27 cycles
+---
+
+## NEW — Cycle #28 Findings (all completed in Cycle #28)
+
+### [DONE - Cycle 28] `send_email` / `schedule_email` — `body` field has no empty-string guard
+Both handlers forwarded `args.body as string` to the SMTP service without any emptiness check. An empty or whitespace-only body would silently send/schedule a blank email. Added guard `!args.body || typeof args.body !== "string" || !(args.body).trim()` → `McpError(InvalidParams)` in both handlers, consistent with `reply_to_email` (Cycle #23).
+
+### [DONE - Cycle 28] `save_draft` — `body` field has no empty-string guard (optional variant)
+`save_draft` accepts `body` as optional (undefined is fine), but an explicitly empty string like `""` or `"  "` was silently accepted. Added optional-variant guard: when `body` is present but not a non-empty string, returns `McpError(InvalidParams, "'body' must be a non-empty string when provided.")`.
+
+### [DONE - Cycle 28] `send_email` / `schedule_email` — `priority` field has no runtime enum validation
+The inputSchema declares `enum: ["high", "normal", "low"]` but the handler cast the value directly with no runtime check. Added `VALID_PRIORITIES = new Set(["high", "normal", "low"])` guard in `send_email` and an inline equivalent in `schedule_email`, both returning `McpError(InvalidParams)` for out-of-enum values including wrong-case strings like `"HIGH"`.
+
+### [DONE - Cycle 28] `saveDraft` `inReplyTo` — not CRLF-sanitized in IMAP service
+In `smtp-service.ts`, `inReplyTo` was already sanitized via `stripHeaderInjection()`. In `simple-imap-service.ts` `saveDraft()`, `options.inReplyTo` was passed raw to nodemailer — a crafted value like `"<id>\r\nBcc: evil@x.com"` could inject a MIME header. Added `options.inReplyTo.replace(/[\r\n\x00]/g, "")` to match the SMTP service behaviour. `references` on the next line already stripped control chars; `inReplyTo` was the sole gap.
+
+IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 28 cycles

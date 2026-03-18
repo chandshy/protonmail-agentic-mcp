@@ -792,7 +792,10 @@ export class SimpleIMAPService {
         subject: options.subject || '(No Subject)',
         text: options.isHtml ? undefined : (options.body || ''),
         html: options.isHtml ? (options.body || '') : undefined,
-        inReplyTo: options.inReplyTo,
+        // Strip CRLF and NUL from inReplyTo to prevent Message-ID header injection
+        // (e.g. a crafted value like "<id>\r\nBcc: evil@x.com" would inject a raw
+        // MIME header line).  Mirrors the stripHeaderInjection() call in smtp-service.ts.
+        inReplyTo: options.inReplyTo ? options.inReplyTo.replace(/[\r\n\x00]/g, "") : undefined,
         references: options.references?.map(r => r.replace(/[\x00-\x1f\x7f]/g, "")).join(' '),
       };
 

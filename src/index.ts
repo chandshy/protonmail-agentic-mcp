@@ -1574,10 +1574,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!args.to || typeof args.to !== "string" || !(args.to as string).trim()) {
           throw new McpError(ErrorCode.InvalidParams, "'to' must be a non-empty string with at least one recipient address.");
         }
+        // Guard empty/whitespace-only 'body' — an empty email body is almost always
+        // a caller error; fail early with a clear message rather than sending blank.
+        // Mirrors the guard added to reply_to_email in Cycle #23.
+        if (!args.body || typeof args.body !== "string" || !(args.body as string).trim()) {
+          throw new McpError(ErrorCode.InvalidParams, "'body' must be a non-empty string.");
+        }
         // RFC 2822 §2.1.1 — header lines SHOULD be ≤998 characters (hard limit).
         // A multi-kilobyte subject causes header bloat and may be rejected by MTAs.
         if (args.subject !== undefined && typeof args.subject === "string" && (args.subject as string).length > MAX_SUBJECT_LENGTH) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' must not exceed ${MAX_SUBJECT_LENGTH} characters (RFC 2822 limit).`);
+        }
+        // Validate priority against the declared enum — the inputSchema declares
+        // enum: ["high","normal","low"] but LLM callers may supply other strings.
+        // Passing an arbitrary string to nodemailer silently missets the X-Priority header.
+        const VALID_PRIORITIES = new Set(["high", "normal", "low"]);
+        if (args.priority !== undefined && !VALID_PRIORITIES.has(args.priority as string)) {
+          throw new McpError(ErrorCode.InvalidParams, `'priority' must be one of "high", "normal", or "low".`);
         }
         const result = await smtpService.sendEmail({
           to: args.to as string,
@@ -1870,6 +1883,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.subject !== undefined && typeof args.subject === "string" && (args.subject as string).length > MAX_SUBJECT_LENGTH) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' must not exceed ${MAX_SUBJECT_LENGTH} characters (RFC 2822 limit).`);
         }
+        // Guard empty/whitespace-only 'body' — saving a draft with a blank body is
+        // almost always a caller error. Drafts can omit body entirely (undefined) but
+        // an explicitly empty string "  " should be rejected with a clear message.
+        if (args.body !== undefined && (typeof args.body !== "string" || !(args.body as string).trim())) {
+          throw new McpError(ErrorCode.InvalidParams, "'body' must be a non-empty string when provided.");
+        }
         const draftResult = await imapService.saveDraft({
           to: args.to as string | undefined,
           cc: args.cc as string | undefined,
@@ -1894,9 +1913,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!args.to || typeof args.to !== "string" || !(args.to as string).trim()) {
           throw new McpError(ErrorCode.InvalidParams, "'to' must be a non-empty string with at least one recipient address.");
         }
+        // Guard empty/whitespace-only 'body' — scheduling an email with a blank body
+        // is almost always a caller error; fail early with a clear message.
+        // Mirrors the guard added to send_email and reply_to_email.
+        if (!args.body || typeof args.body !== "string" || !(args.body as string).trim()) {
+          throw new McpError(ErrorCode.InvalidParams, "'body' must be a non-empty string.");
+        }
         // RFC 2822 subject length cap (shared with send_email / save_draft).
         if (args.subject !== undefined && typeof args.subject === "string" && (args.subject as string).length > MAX_SUBJECT_LENGTH) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' must not exceed ${MAX_SUBJECT_LENGTH} characters (RFC 2822 limit).`);
+        }
+        // Validate priority against the declared enum — mirrors the guard in send_email.
+        if (args.priority !== undefined && !new Set(["high", "normal", "low"]).has(args.priority as string)) {
+          throw new McpError(ErrorCode.InvalidParams, `'priority' must be one of "high", "normal", or "low".`);
         }
         // Validate send_at as a parseable ISO date string.
         if (!args.send_at || typeof args.send_at !== "string") {

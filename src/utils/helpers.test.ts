@@ -2110,4 +2110,187 @@ describe('helpers', () => {
       expect(isNonNumericLimit({})).toBe(true);
     });
   });
+
+  // ── Cycle #28: body empty-string guard (send_email / save_draft / schedule_email) ──
+
+  // Helper that mirrors the guard in send_email and schedule_email (body is required):
+  //   !args.body || typeof args.body !== "string" || !(args.body).trim()
+  function isBodyInvalidRequired(body: unknown): boolean {
+    return !body || typeof body !== "string" || !(body as string).trim();
+  }
+
+  // Helper that mirrors the guard in save_draft (body is optional but if present must be non-empty):
+  //   args.body !== undefined && (typeof args.body !== "string" || !(args.body).trim())
+  function isBodyInvalidOptional(body: unknown): boolean {
+    return body !== undefined && (typeof body !== "string" || !(body as string).trim());
+  }
+
+  // Helper that mirrors the priority enum guard in send_email / schedule_email:
+  //   args.priority !== undefined && !VALID_PRIORITIES.has(args.priority)
+  const VALID_PRIORITIES = new Set(["high", "normal", "low"]);
+  function isPriorityInvalid(priority: unknown): boolean {
+    return priority !== undefined && !VALID_PRIORITIES.has(priority as string);
+  }
+
+  // Helper that mirrors the inReplyTo sanitization in saveDraft service:
+  //   options.inReplyTo ? options.inReplyTo.replace(/[\r\n\x00]/g, "") : undefined
+  function sanitizeInReplyTo(val: string | undefined): string | undefined {
+    return val ? val.replace(/[\r\n\x00]/g, "") : undefined;
+  }
+
+  describe("send_email / schedule_email 'body' required non-empty guard (Cycle #28)", () => {
+    it('non-empty string "Hello" passes', () => {
+      expect(isBodyInvalidRequired("Hello")).toBe(false);
+    });
+
+    it('multi-line body passes', () => {
+      expect(isBodyInvalidRequired("Line 1\nLine 2")).toBe(false);
+    });
+
+    it('HTML body passes', () => {
+      expect(isBodyInvalidRequired("<p>Hello</p>")).toBe(false);
+    });
+
+    it('body with leading/trailing spaces passes (trim checks emptiness, not stripping)', () => {
+      expect(isBodyInvalidRequired("  hello  ")).toBe(false);
+    });
+
+    it('empty string "" triggers guard', () => {
+      expect(isBodyInvalidRequired("")).toBe(true);
+    });
+
+    it('whitespace-only "   " triggers guard', () => {
+      expect(isBodyInvalidRequired("   ")).toBe(true);
+    });
+
+    it('newline-only "\\n" triggers guard', () => {
+      expect(isBodyInvalidRequired("\n")).toBe(true);
+    });
+
+    it('undefined triggers guard (body is required for send_email/schedule_email)', () => {
+      expect(isBodyInvalidRequired(undefined)).toBe(true);
+    });
+
+    it('null triggers guard', () => {
+      expect(isBodyInvalidRequired(null)).toBe(true);
+    });
+
+    it('number 0 triggers guard (wrong type)', () => {
+      expect(isBodyInvalidRequired(0)).toBe(true);
+    });
+
+    it('boolean false triggers guard (wrong type)', () => {
+      expect(isBodyInvalidRequired(false)).toBe(true);
+    });
+  });
+
+  describe("save_draft 'body' optional non-empty guard (Cycle #28)", () => {
+    it('undefined is accepted (body is optional for drafts)', () => {
+      expect(isBodyInvalidOptional(undefined)).toBe(false);
+    });
+
+    it('non-empty string "Hello" is accepted', () => {
+      expect(isBodyInvalidOptional("Hello")).toBe(false);
+    });
+
+    it('HTML body is accepted', () => {
+      expect(isBodyInvalidOptional("<p>Hello</p>")).toBe(false);
+    });
+
+    it('empty string "" triggers guard', () => {
+      expect(isBodyInvalidOptional("")).toBe(true);
+    });
+
+    it('whitespace-only "   " triggers guard', () => {
+      expect(isBodyInvalidOptional("   ")).toBe(true);
+    });
+
+    it('null triggers guard (explicitly set to null)', () => {
+      expect(isBodyInvalidOptional(null)).toBe(true);
+    });
+
+    it('number 42 triggers guard (wrong type when present)', () => {
+      expect(isBodyInvalidOptional(42)).toBe(true);
+    });
+  });
+
+  describe("send_email / schedule_email 'priority' enum guard (Cycle #28)", () => {
+    it('"high" is a valid priority', () => {
+      expect(isPriorityInvalid("high")).toBe(false);
+    });
+
+    it('"normal" is a valid priority', () => {
+      expect(isPriorityInvalid("normal")).toBe(false);
+    });
+
+    it('"low" is a valid priority', () => {
+      expect(isPriorityInvalid("low")).toBe(false);
+    });
+
+    it('undefined is accepted (priority is optional)', () => {
+      expect(isPriorityInvalid(undefined)).toBe(false);
+    });
+
+    it('"urgent" triggers guard (not in enum)', () => {
+      expect(isPriorityInvalid("urgent")).toBe(true);
+    });
+
+    it('"HIGH" triggers guard (case-sensitive match)', () => {
+      expect(isPriorityInvalid("HIGH")).toBe(true);
+    });
+
+    it('"medium" triggers guard (not in enum)', () => {
+      expect(isPriorityInvalid("medium")).toBe(true);
+    });
+
+    it('empty string "" triggers guard', () => {
+      expect(isPriorityInvalid("")).toBe(true);
+    });
+
+    it('number 1 triggers guard (wrong type)', () => {
+      expect(isPriorityInvalid(1)).toBe(true);
+    });
+
+    it('null triggers guard (explicitly provided null)', () => {
+      expect(isPriorityInvalid(null)).toBe(true);
+    });
+  });
+
+  describe("saveDraft inReplyTo CRLF sanitization (Cycle #28)", () => {
+    it('undefined returns undefined', () => {
+      expect(sanitizeInReplyTo(undefined)).toBe(undefined);
+    });
+
+    it('clean Message-ID is returned unchanged', () => {
+      expect(sanitizeInReplyTo("<abc123@mail.example.com>")).toBe("<abc123@mail.example.com>");
+    });
+
+    it('CR in value is stripped', () => {
+      expect(sanitizeInReplyTo("<id>\rBcc: evil@x.com")).toBe("<id>Bcc: evil@x.com");
+    });
+
+    it('LF in value is stripped', () => {
+      expect(sanitizeInReplyTo("<id>\nBcc: evil@x.com")).toBe("<id>Bcc: evil@x.com");
+    });
+
+    it('CRLF sequence is stripped', () => {
+      expect(sanitizeInReplyTo("<id>\r\nX-Injected: yes")).toBe("<id>X-Injected: yes");
+    });
+
+    it('NUL byte is stripped', () => {
+      expect(sanitizeInReplyTo("<id\x00>")).toBe("<id>");
+    });
+
+    it('multiple injection sequences are all stripped', () => {
+      expect(sanitizeInReplyTo("<a>\r\n<b>\r\n<c>")).toBe("<a><b><c>");
+    });
+
+    it('clean value with angle brackets and dots is untouched', () => {
+      expect(sanitizeInReplyTo("<2024.01.15.thread@proton.me>")).toBe("<2024.01.15.thread@proton.me>");
+    });
+
+    it('empty string returns undefined (falsy path)', () => {
+      expect(sanitizeInReplyTo("")).toBe(undefined);
+    });
+  });
 });
