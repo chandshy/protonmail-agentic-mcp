@@ -145,12 +145,12 @@ export async function retry<T>(
   maxRetries: number = 3,
   delayMs: number = 1000
 ): Promise<T> {
-  let lastError: any;
+  let lastError: unknown;
 
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
-    } catch (error) {
+    } catch (error: unknown) {
       lastError = error;
       if (i < maxRetries - 1) {
         await sleep(delayMs * Math.pow(2, i));

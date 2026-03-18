@@ -2272,8 +2272,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           }, sendAt);
           return ok({ success: true, id: schedId, scheduledAt: sendAt.toISOString() },
             `Scheduled for ${sendAt.toISOString()} (ID: ${schedId})`);
-        } catch (err: any) {
-          return { content: [{ type: "text" as const, text: err.message }], isError: true, structuredContent: { success: false, reason: err.message } };
+        } catch (err: unknown) {
+          const errMsg = safeErrorMessage(err);
+          return { content: [{ type: "text" as const, text: errMsg }], isError: true, structuredContent: { success: false, reason: errMsg } };
         }
       }
 
@@ -2517,7 +2518,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await imapService.markEmailRead(bmrEmailIds[i], bmrIsRead);
             bmrResults.success++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             bmrResults.failed++;
             bmrResults.errors.push(`${bmrEmailIds[i]}: ${safeErrorMessage(e)}`);
           }
@@ -2547,7 +2548,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await imapService.starEmail(bsEmailIds[i], bsIsStarred);
             bsResults.success++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             bsResults.failed++;
             bsResults.errors.push(`${bsEmailIds[i]}: ${safeErrorMessage(e)}`);
           }
@@ -2576,7 +2577,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await imapService.moveEmail(emailIds[i], targetFolder);
             results.success++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             results.failed++;
             results.errors.push(`${emailIds[i]}: ${safeErrorMessage(e)}`);
           }
@@ -2631,7 +2632,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await imapService.copyEmailToFolder(emailIds2[i], labelFolder);
             results2.success++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             results2.failed++;
             results2.errors.push(`${emailIds2[i]}: ${safeErrorMessage(e)}`);
           }
@@ -2679,7 +2680,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await imapService.deleteFromFolder(brlEmailIds[i], brlLabelFolder);
             brlResults.success++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             brlResults.failed++;
             brlResults.errors.push(`${brlEmailIds[i]}: ${safeErrorMessage(e)}`);
           }
@@ -2713,7 +2714,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           try {
             await imapService.deleteEmail(emailIds3[i]);
             results3.success++;
-          } catch (e: any) {
+          } catch (e: unknown) {
             results3.failed++;
             results3.errors.push(`${emailIds3[i]}: ${safeErrorMessage(e)}`);
           }
@@ -2829,7 +2830,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       default:
         throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
     }
-  } catch (error: any) {
+  } catch (error: unknown) {
     logger.error(`Tool failed: ${name}`, "MCPServer", error);
     const msg = safeErrorMessage(error);
     return {
@@ -3500,7 +3501,7 @@ async function main() {
       smtpService.verifyConnection().then(() => {
         smtpStatus = { connected: true, lastCheck: new Date() };
         logger.info("SMTP connection verified", "MCPServer");
-      }).catch((e: any) => {
+      }).catch((e: unknown) => {
         smtpStatus = { connected: false, lastCheck: new Date(), error: diagnosticErrorMessage(e) };
         logger.warn("SMTP connection failed — sending features limited", "MCPServer", e);
         logger.info("Use your Proton Bridge password (not your ProtonMail account password)", "MCPServer");
@@ -3514,7 +3515,7 @@ async function main() {
         config.imap.secure
       ).then(() => {
         logger.info("IMAP connection established", "MCPServer");
-      }).catch((e: any) => {
+      }).catch((e: unknown) => {
         logger.warn("IMAP connection failed — reading features limited", "MCPServer", e);
         logger.info("Ensure Proton Bridge is running on localhost:1143", "MCPServer");
       }),

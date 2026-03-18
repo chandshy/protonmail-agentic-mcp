@@ -353,11 +353,11 @@ export class SMTPService {
         success: true,
         messageId: info.messageId,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error("Failed to send email", "SMTPService", error);
       return {
         success: false,
-        error: error.message,
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
     }); // end tracer.span('smtp.sendEmail')

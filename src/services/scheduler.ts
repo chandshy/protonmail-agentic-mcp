@@ -187,14 +187,15 @@ export class SchedulerService {
               logger.warn(`Scheduled email send failed (attempt ${item.retryCount}/${MAX_RETRIES}), will retry`, "Scheduler", { id: item.id, error: result.error });
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           item.retryCount = (item.retryCount ?? 0) + 1;
-          item.error = err.message;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          item.error = errMsg;
           if ((item.retryCount ?? 0) >= MAX_RETRIES) {
             item.status = "failed";
-            logger.error(`Scheduled email permanently failed after ${MAX_RETRIES} attempts`, "Scheduler", { id: item.id, error: err.message });
+            logger.error(`Scheduled email permanently failed after ${MAX_RETRIES} attempts`, "Scheduler", { id: item.id, error: errMsg });
           } else {
-            logger.warn(`Scheduled email threw (attempt ${item.retryCount}/${MAX_RETRIES}), will retry`, "Scheduler", { id: item.id, error: err.message });
+            logger.warn(`Scheduled email threw (attempt ${item.retryCount}/${MAX_RETRIES}), will retry`, "Scheduler", { id: item.id, error: errMsg });
           }
         }
       }

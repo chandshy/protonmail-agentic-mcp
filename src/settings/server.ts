@@ -3029,8 +3029,8 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
             try { return JSON.parse(l); } catch { return { level: "info", message: l, context: "raw", timestamp: null }; }
           });
           json(res, 200, { lines: slice, page: safePage, pages, total });
-        } catch (e: any) {
-          json(res, 500, { error: String(e?.message ?? e) });
+        } catch (e: unknown) {
+          json(res, 500, { error: e instanceof Error ? e.message : String(e) });
         }
         return;
       }
@@ -3042,8 +3042,8 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
           const logPath = getLogFilePath();
           if (existsSync(logPath)) writeFileSync(logPath, "", "utf8");
           json(res, 200, { ok: true });
-        } catch (e: any) {
-          json(res, 500, { error: String(e?.message ?? e) });
+        } catch (e: unknown) {
+          json(res, 500, { error: e instanceof Error ? e.message : String(e) });
         }
         return;
       }
@@ -3107,8 +3107,8 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
           renameSync(tmpPath, claudeConfigPath);
 
           json(res, 200, { ok: true, configPath: claudeConfigPath, entry });
-        } catch (e: any) {
-          json(res, 200, { ok: false, error: String(e?.message ?? e) });
+        } catch (e: unknown) {
+          json(res, 200, { ok: false, error: e instanceof Error ? e.message : String(e) });
         }
         return;
       }
@@ -3154,8 +3154,9 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
           }
 
           json(res, 200, { ok: true });
-        } catch (e: any) {
-          json(res, 200, { ok: true }); // Still return ok — kill may fail if not running
+        } catch (e: unknown) {
+          void e; // kill may fail if process not running — still return ok
+          json(res, 200, { ok: true });
         }
         return;
       }
@@ -3170,10 +3171,11 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
       }
 
       json(res, 404, { error: "Not found" });
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Never reflect raw error messages to callers (information disclosure).
-      const isOversize = (err as any)?.code === "TOO_LARGE";
-      const isTimeout  = (err as any)?.code === "TIMEOUT";
+      const errCode    = (err as { code?: string } | null)?.code;
+      const isOversize = errCode === "TOO_LARGE";
+      const isTimeout  = errCode === "TIMEOUT";
       const status = isOversize || isTimeout ? 400 : 500;
       const msg    = isOversize ? "Request body too large."
                    : isTimeout  ? "Request timed out."
