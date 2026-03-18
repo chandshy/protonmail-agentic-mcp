@@ -1664,6 +1664,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "search_emails": {
         const folder = (args.folder as string) || "INBOX";
         const folders = args.folders as string[] | undefined;
+        // Guard free-text search fields against excessively long strings that could
+        // produce oversized IMAP SEARCH commands (imapflow handles encoding; this is
+        // a defence-in-depth limit, not an injection guard).
+        const MAX_SEARCH_TEXT = 500;
+        if (args.from && (args.from as string).length > MAX_SEARCH_TEXT) {
+          throw new McpError(ErrorCode.InvalidParams, `'from' filter must not exceed ${MAX_SEARCH_TEXT} characters.`);
+        }
+        if (args.to && (args.to as string).length > MAX_SEARCH_TEXT) {
+          throw new McpError(ErrorCode.InvalidParams, `'to' filter must not exceed ${MAX_SEARCH_TEXT} characters.`);
+        }
+        if (args.subject && (args.subject as string).length > MAX_SEARCH_TEXT) {
+          throw new McpError(ErrorCode.InvalidParams, `'subject' filter must not exceed ${MAX_SEARCH_TEXT} characters.`);
+        }
         const results = await imapService.searchEmails({
           folder: folders ? undefined : folder,
           folders,

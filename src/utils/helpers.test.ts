@@ -389,4 +389,170 @@ describe('helpers', () => {
       expect(isValidEmail(`${longLocal}@example.com`)).toBe(false);
     });
   });
+
+  // ── Cycle #5 handler-level guard paths ────────────────────────────────────
+  // decodeCursor, get_email_by_id, and download_attachment each use inline
+  // guards that cannot be imported from index.ts.  These test suites exercise
+  // the exact helper calls / inline expressions those handlers use, mirroring
+  // the same pattern established in Cycle #4.
+
+  describe('decodeCursor folder validation (validateTargetFolder)', () => {
+    // mirrors: if (validateTargetFolder(parsed.folder) !== null) return null;
+    // A crafted cursor whose folder field contains traversal sequences, control
+    // characters, or an oversized path must be rejected (returns non-null error).
+
+    it('accepts a simple folder like INBOX', () => {
+      expect(validateTargetFolder('INBOX')).toBeNull();
+    });
+
+    it('accepts a path with a forward slash like Labels/Work', () => {
+      expect(validateTargetFolder('Labels/Work')).toBeNull();
+    });
+
+    it('accepts a folder exactly 1000 characters long (boundary)', () => {
+      expect(validateTargetFolder('a'.repeat(1000))).toBeNull();
+    });
+
+    it('rejects a folder with a path traversal .. segment', () => {
+      const err = validateTargetFolder('../../etc/passwd');
+      expect(err).not.toBeNull();
+      expect(err).toMatch(/invalid characters/i);
+    });
+
+    it('rejects a folder with an embedded .. like Labels/../INBOX', () => {
+      const err = validateTargetFolder('Labels/../INBOX');
+      expect(err).not.toBeNull();
+      expect(err).toMatch(/invalid characters/i);
+    });
+
+    it('rejects a folder with a null byte (control character)', () => {
+      const err = validateTargetFolder('INBOX\x00evil');
+      expect(err).not.toBeNull();
+      expect(err).toMatch(/invalid characters/i);
+    });
+
+    it('rejects a folder with other C0 control characters', () => {
+      const err = validateTargetFolder('INBOX\x07bell');
+      expect(err).not.toBeNull();
+      expect(err).toMatch(/invalid characters/i);
+    });
+
+    it('rejects a folder exceeding 1000 characters', () => {
+      const err = validateTargetFolder('a'.repeat(1001));
+      expect(err).not.toBeNull();
+      expect(err).toMatch(/exceeds maximum length/i);
+    });
+  });
+
+  describe('get_email_by_id handler validation (numeric UID guard)', () => {
+    // mirrors: if (!rawEmailId || typeof rawEmailId !== 'string' || !/^\d+$/.test(rawEmailId))
+    //            throw McpError(InvalidParams, 'emailId must be a non-empty numeric UID string.')
+    // The guard expression evaluates to true (throw) for any of the bad inputs below.
+
+    function isInvalidEmailId(v: unknown): boolean {
+      const rawEmailId = v as string;
+      return !rawEmailId || typeof rawEmailId !== 'string' || !/^\d+$/.test(rawEmailId);
+    }
+
+    it('passes (returns false) for a valid numeric UID string like "12345"', () => {
+      expect(isInvalidEmailId('12345')).toBe(false);
+    });
+
+    it('passes for a single-digit UID string "1"', () => {
+      expect(isInvalidEmailId('1')).toBe(false);
+    });
+
+    it('throws-guard for an empty string', () => {
+      expect(isInvalidEmailId('')).toBe(true);
+    });
+
+    it('throws-guard for a non-numeric string like "abc"', () => {
+      expect(isInvalidEmailId('abc')).toBe(true);
+    });
+
+    it('throws-guard for a string with letters mixed in like "12a3"', () => {
+      expect(isInvalidEmailId('12a3')).toBe(true);
+    });
+
+    it('throws-guard for a negative number string "-1"', () => {
+      expect(isInvalidEmailId('-1')).toBe(true);
+    });
+
+    it('throws-guard for a float string "1.5"', () => {
+      expect(isInvalidEmailId('1.5')).toBe(true);
+    });
+
+    it('throws-guard for null', () => {
+      expect(isInvalidEmailId(null)).toBe(true);
+    });
+
+    it('throws-guard for undefined', () => {
+      expect(isInvalidEmailId(undefined)).toBe(true);
+    });
+
+    it('throws-guard for a string with a null byte', () => {
+      expect(isInvalidEmailId('123\x00')).toBe(true);
+    });
+  });
+
+  describe('download_attachment handler validation', () => {
+    // email_id guard mirrors get_email_by_id (same pattern).
+    // attachment_index guard: !Number.isInteger(rawAttIdx) || rawAttIdx < 0
+
+    function isInvalidAttEmailId(v: unknown): boolean {
+      const rawAttEmailId = v as string;
+      return !rawAttEmailId || typeof rawAttEmailId !== 'string' || !/^\d+$/.test(rawAttEmailId);
+    }
+
+    function isInvalidAttIndex(v: unknown): boolean {
+      const rawAttIdx = v as number;
+      return !Number.isInteger(rawAttIdx) || rawAttIdx < 0;
+    }
+
+    // email_id tests
+    it('email_id: passes for valid numeric UID "99"', () => {
+      expect(isInvalidAttEmailId('99')).toBe(false);
+    });
+
+    it('email_id: throws-guard for empty string', () => {
+      expect(isInvalidAttEmailId('')).toBe(true);
+    });
+
+    it('email_id: throws-guard for non-numeric string "abc"', () => {
+      expect(isInvalidAttEmailId('abc')).toBe(true);
+    });
+
+    it('email_id: throws-guard for null', () => {
+      expect(isInvalidAttEmailId(null)).toBe(true);
+    });
+
+    // attachment_index tests
+    it('attachment_index: passes for 0 (first attachment)', () => {
+      expect(isInvalidAttIndex(0)).toBe(false);
+    });
+
+    it('attachment_index: passes for positive integer 3', () => {
+      expect(isInvalidAttIndex(3)).toBe(false);
+    });
+
+    it('attachment_index: throws-guard for -1 (negative)', () => {
+      expect(isInvalidAttIndex(-1)).toBe(true);
+    });
+
+    it('attachment_index: throws-guard for a float 1.5', () => {
+      expect(isInvalidAttIndex(1.5)).toBe(true);
+    });
+
+    it('attachment_index: throws-guard for NaN', () => {
+      expect(isInvalidAttIndex(NaN)).toBe(true);
+    });
+
+    it('attachment_index: throws-guard for a string "0"', () => {
+      expect(isInvalidAttIndex('0')).toBe(true);
+    });
+
+    it('attachment_index: throws-guard for undefined', () => {
+      expect(isInvalidAttIndex(undefined)).toBe(true);
+    });
+  });
 });
