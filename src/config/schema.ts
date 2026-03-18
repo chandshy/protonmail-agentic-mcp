@@ -8,9 +8,11 @@
 export const ALL_TOOLS = [
   // Sending
   "send_email", "reply_to_email", "forward_email", "send_test_email",
+  // Drafts & scheduling
+  "save_draft", "schedule_email", "list_scheduled_emails", "cancel_scheduled_email",
   // Reading
   "get_emails", "get_email_by_id", "search_emails", "get_unread_count",
-  "list_labels", "get_emails_by_label",
+  "list_labels", "get_emails_by_label", "download_attachment",
   // Folder management
   "get_folders", "sync_folders", "create_folder", "delete_folder", "rename_folder",
   // Email actions
@@ -46,10 +48,16 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
     tools: ["send_email", "reply_to_email", "forward_email", "send_test_email"],
     risk: "moderate",
   },
+  drafts: {
+    label: "Drafts & Scheduling",
+    description: "Save drafts and schedule emails for future delivery",
+    tools: ["save_draft", "schedule_email", "list_scheduled_emails", "cancel_scheduled_email"],
+    risk: "moderate",
+  },
   reading: {
     label: "Reading",
-    description: "Fetch, search, and preview email content",
-    tools: ["get_emails", "get_email_by_id", "search_emails", "get_unread_count", "list_labels", "get_emails_by_label"],
+    description: "Fetch, search, preview email content, and download attachments",
+    tools: ["get_emails", "get_email_by_id", "search_emails", "get_unread_count", "list_labels", "get_emails_by_label", "download_attachment"],
     risk: "safe",
   },
   folders: {

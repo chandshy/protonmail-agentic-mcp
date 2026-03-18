@@ -6,7 +6,8 @@ import { ImapFlow } from 'imapflow';
 import { readFileSync } from 'fs';
 import type { ParsedMail, Attachment } from 'mailparser';
 import { simpleParser } from 'mailparser';
-import { EmailMessage, EmailFolder, SearchEmailOptions } from '../types/index.js';
+import nodemailer from 'nodemailer';
+import { EmailMessage, EmailFolder, SearchEmailOptions, SaveDraftOptions } from '../types/index.js';
 import { logger } from '../utils/logger.js';
 import { extractEmailAddress, extractName, generateId } from '../utils/helpers.js';
 
@@ -433,6 +434,64 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Search a single folder — extracted so multi-folder search can call it per folder.
+   * Caller is responsible for ensuring the IMAP client is connected.
+   */
+  private async searchSingleFolder(folder: string, options: SearchEmailOptions, limit: number): Promise<EmailMessage[]> {
+    if (!this.client) return [];
+    const lock = await this.client.getMailboxLock(folder);
+
+    try {
+      const searchCriteria: any = {};
+
+      if (options.from) searchCriteria.from = options.from;
+      if (options.to) searchCriteria.to = options.to;
+      if (options.subject) searchCriteria.subject = options.subject;
+      if (options.dateFrom) searchCriteria.since = new Date(options.dateFrom);
+      if (options.dateTo) searchCriteria.before = new Date(options.dateTo);
+
+      if (options.isRead !== undefined) {
+        if (options.isRead) {
+          searchCriteria.seen = true;
+        } else {
+          searchCriteria.unseen = true;
+        }
+      }
+
+      if (options.isStarred !== undefined) {
+        if (options.isStarred) {
+          searchCriteria.flagged = true;
+        }
+      }
+
+      const uids = await this.client.search(searchCriteria, { uid: true });
+      const results: EmailMessage[] = [];
+
+      const limitedUids = Array.isArray(uids) ? uids.slice(0, limit) : [];
+
+      for (const uid of limitedUids) {
+        const email = await this.getEmailById(uid.toString());
+        if (email) {
+          results.push({
+            ...email,
+            body: truncateBody(email.body),
+            attachments: email.attachments?.map(att => ({
+              filename: att.filename,
+              contentType: att.contentType,
+              size: att.size,
+              contentId: att.contentId
+            }))
+          });
+        }
+      }
+
+      return results;
+    } finally {
+      lock.release();
+    }
+  }
+
   async searchEmails(options: SearchEmailOptions): Promise<EmailMessage[]> {
     logger.debug('Searching emails', 'IMAPService', options);
 
@@ -448,73 +507,183 @@ export class SimpleIMAPService {
       return [];
     }
 
-    const folder = options.folder || 'INBOX';
-    this.validateFolderName(folder);
     const limit = Math.min(Math.max(1, options.limit || 100), 200);
 
+    // Determine which folders to search
+    let foldersToSearch: string[];
+    if (options.folders && options.folders.length > 0) {
+      if (options.folders[0] === '*' || options.folders[0] === 'all') {
+        // Search all available folders (capped at 20 to prevent abuse)
+        const allFolders = await this.getFolders();
+        foldersToSearch = allFolders.slice(0, 20).map(f => f.path);
+      } else {
+        // Cap at 20 explicit folders
+        foldersToSearch = options.folders.slice(0, 20);
+      }
+    } else {
+      // Single folder — original behaviour (defaults to INBOX)
+      foldersToSearch = [options.folder || 'INBOX'];
+    }
+
+    // Validate all folder names before starting
+    for (const f of foldersToSearch) {
+      this.validateFolderName(f);
+    }
+
     try {
-      const lock = await this.client.getMailboxLock(folder);
-
-      try {
-        const searchCriteria: any = {};
-
-        if (options.from) searchCriteria.from = options.from;
-        if (options.to) searchCriteria.to = options.to;
-        if (options.subject) searchCriteria.subject = options.subject;
-        if (options.dateFrom) searchCriteria.since = new Date(options.dateFrom);
-        if (options.dateTo) searchCriteria.before = new Date(options.dateTo);
-
-        if (options.isRead !== undefined) {
-          if (options.isRead) {
-            searchCriteria.seen = true;
-          } else {
-            searchCriteria.unseen = true;
-          }
-        }
-
-        if (options.isStarred !== undefined) {
-          if (options.isStarred) {
-            searchCriteria.flagged = true;
-          }
-        }
-
-        const uids = await this.client.search(searchCriteria, { uid: true });
-        const results: EmailMessage[] = [];
-
-        const limitedUids = Array.isArray(uids) ? uids.slice(0, limit) : [];
-
-        for (const uid of limitedUids) {
-          const email = await this.getEmailById(uid.toString());
-          if (email) {
-            // Return truncated body for search results (list view), without attachment content
-            results.push({
-              ...email,
-              body: truncateBody(email.body),
-              // Remove attachment content from search results to reduce payload size
-              attachments: email.attachments?.map(att => ({
-                filename: att.filename,
-                contentType: att.contentType,
-                size: att.size,
-                contentId: att.contentId
-                // content is intentionally omitted
-              }))
-            });
-          }
-        }
-
-        // Post-filter by hasAttachment if requested (IMAP SEARCH has no native attachment filter)
+      if (foldersToSearch.length === 1) {
+        // Fast path: no merging needed
+        const results = await this.searchSingleFolder(foldersToSearch[0], options, limit);
         const filtered = options.hasAttachment !== undefined
           ? results.filter(e => e.hasAttachment === options.hasAttachment)
           : results;
-
         logger.info(`Search found ${filtered.length} emails`, 'IMAPService');
         return filtered;
-      } finally {
-        lock.release();
       }
+
+      // Multi-folder: search each, merge, sort by date desc, apply limit
+      const settled = await Promise.allSettled(
+        foldersToSearch.map(f => this.searchSingleFolder(f, options, limit))
+      );
+
+      const merged: EmailMessage[] = [];
+      for (const r of settled) {
+        if (r.status === 'fulfilled') merged.push(...r.value);
+      }
+
+      merged.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+      const limited = merged.slice(0, limit);
+      const filtered = options.hasAttachment !== undefined
+        ? limited.filter(e => e.hasAttachment === options.hasAttachment)
+        : limited;
+
+      logger.info(`Multi-folder search found ${filtered.length} emails across ${foldersToSearch.length} folders`, 'IMAPService');
+      return filtered;
     } catch (error) {
       logger.error('Failed to search emails', 'IMAPService', error);
       throw error;
+    }
+  }
+
+  /**
+   * Download the binary content of an attachment.
+   * The content is sourced from the in-process email cache (populated by
+   * getEmailById / getEmails). If the email is not yet cached, a fetch is
+   * triggered first.
+   *
+   * Returns null if the email or attachment index is not found.
+   */
+  async downloadAttachment(emailId: string, attachmentIndex: number): Promise<{
+    filename: string;
+    contentType: string;
+    size: number;
+    content: string;
+    encoding: "base64";
+  } | null> {
+    this.validateEmailId(emailId);
+    logger.debug('Downloading attachment', 'IMAPService', { emailId, attachmentIndex });
+
+    // Ensure the email (with attachment content) is in cache
+    if (!this.emailCache.has(emailId)) {
+      // getEmailById populates the cache with full content
+      await this.getEmailById(emailId);
+    }
+
+    const cached = this.emailCache.get(emailId);
+    if (!cached || !cached.attachments || cached.attachments.length === 0) {
+      return null;
+    }
+
+    const idx = Math.trunc(attachmentIndex);
+    if (idx < 0 || idx >= cached.attachments.length) {
+      return null;
+    }
+
+    const att = cached.attachments[idx];
+    if (!att.content) {
+      // Content not available (e.g., attachment was fetched without content)
+      return null;
+    }
+
+    let content: string;
+    if (Buffer.isBuffer(att.content)) {
+      content = att.content.toString('base64');
+    } else {
+      // Already a base64 string
+      content = att.content;
+    }
+
+    return {
+      filename: att.filename,
+      contentType: att.contentType,
+      size: att.size,
+      content,
+      encoding: "base64",
+    };
+  }
+
+  /**
+   * Save an email as a draft in the Drafts folder via IMAP APPEND.
+   * Builds the raw MIME message using nodemailer's stream transport, then
+   * appends it with the \Draft flag set.
+   *
+   * Returns the UID assigned by the server, or undefined if the server does
+   * not report one.
+   */
+  async saveDraft(options: SaveDraftOptions): Promise<{ success: boolean; uid?: number; error?: string }> {
+    logger.debug('Saving draft', 'IMAPService', { subject: options.subject });
+
+    if (!this.client || !this.isConnected) {
+      return { success: false, error: 'IMAP not connected' };
+    }
+
+    try {
+      // Build the raw MIME message using nodemailer's buffer transport
+      const transport = nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'crlf' });
+
+      const toAddresses = !options.to
+        ? undefined
+        : Array.isArray(options.to) ? options.to.join(', ') : options.to;
+      const ccAddresses = !options.cc
+        ? undefined
+        : Array.isArray(options.cc) ? options.cc.join(', ') : options.cc;
+      const bccAddresses = !options.bcc
+        ? undefined
+        : Array.isArray(options.bcc) ? options.bcc.join(', ') : options.bcc;
+
+      const mailOptions: any = {
+        to: toAddresses,
+        cc: ccAddresses,
+        bcc: bccAddresses,
+        subject: options.subject || '(No Subject)',
+        text: options.isHtml ? undefined : (options.body || ''),
+        html: options.isHtml ? (options.body || '') : undefined,
+        inReplyTo: options.inReplyTo,
+        references: options.references?.join(' '),
+      };
+
+      if (options.attachments && options.attachments.length > 0) {
+        mailOptions.attachments = options.attachments.map(att => ({
+          filename: att.filename,
+          content: att.content,
+          contentType: att.contentType,
+          cid: att.contentId,
+        }));
+      }
+
+      const info = await transport.sendMail(mailOptions);
+      const rawMime = info.message as Buffer;
+
+      // Append to Drafts folder with the \Draft IMAP flag
+      const result = await this.client.append('Drafts', rawMime, ['\\Draft']);
+
+      const uid = result && typeof result === 'object' ? (result as any).uid : undefined;
+      logger.info('Draft saved', 'IMAPService', { uid });
+      return { success: true, uid };
+    } catch (error: any) {
+      logger.error('Failed to save draft', 'IMAPService', error);
+      return { success: false, error: error.message };
     }
   }
 

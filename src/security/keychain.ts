@@ -1,14 +1,14 @@
 /**
  * OS keychain abstraction for credential storage.
  *
- * Uses `keytar` (optional dependency) to store credentials in:
- * - Windows: Credential Manager
+ * Uses `@napi-rs/keyring` (optional dependency) to store credentials in:
+ * - Windows: Credential Manager (pre-built binaries, no compilation needed)
  * - macOS: Keychain
  * - Linux: libsecret / GNOME Keyring
  *
- * If keytar is not installed or the OS keychain is unavailable (headless
- * server, no GUI), all functions gracefully return null/false and the
- * caller falls back to config-file storage.
+ * If @napi-rs/keyring is not installed or the OS keychain is unavailable
+ * (headless server, no GUI), all functions gracefully return null/false and
+ * the caller falls back to config-file storage.
  */
 
 import type { ServerConfig } from "../config/schema.js";
@@ -19,28 +19,35 @@ const SERVICE_NAME = "protonmail-mcp-server";
 const KEY_PASSWORD = "bridge-password";
 const KEY_SMTP_TOKEN = "smtp-token";
 
-// ─── Lazy keytar loading ──────────────────────────────────────────────────────
+// ─── Lazy @napi-rs/keyring loading ────────────────────────────────────────────
 
-interface KeytarModule {
-  getPassword(service: string, account: string): Promise<string | null>;
-  setPassword(service: string, account: string, password: string): Promise<void>;
-  deletePassword(service: string, account: string): Promise<boolean>;
+interface EntryClass {
+  new (service: string, account: string): {
+    getPassword(): string | null;
+    setPassword(password: string): void;
+    deletePassword(): boolean;
+  };
 }
 
-let keytarModule: KeytarModule | null = null;
-let keytarChecked = false;
+interface KeyringModule {
+  Entry: EntryClass;
+}
 
-async function getKeytar(): Promise<KeytarModule | null> {
-  if (keytarChecked) return keytarModule;
-  keytarChecked = true;
+let keyringModule: KeyringModule | null = null;
+let keyringChecked = false;
+
+async function getKeyring(): Promise<KeyringModule | null> {
+  if (keyringChecked) return keyringModule;
+  keyringChecked = true;
   try {
-    // Dynamic import — keytar is an optional dependency and may not be installed.
-    // Using Function constructor to bypass TypeScript's static module resolution.
+    // Dynamic import — @napi-rs/keyring is an optional dependency and may not
+    // be installed. Using Function constructor to bypass TypeScript's static
+    // module resolution.
     const importFn = new Function("specifier", "return import(specifier)") as (s: string) => Promise<any>;
-    keytarModule = await importFn("keytar") as KeytarModule;
-    return keytarModule;
+    keyringModule = await importFn("@napi-rs/keyring") as KeyringModule;
+    return keyringModule;
   } catch {
-    keytarModule = null;
+    keyringModule = null;
     return null;
   }
 }
@@ -49,14 +56,16 @@ async function getKeytar(): Promise<KeytarModule | null> {
 
 /**
  * Check if the OS keychain is available.
- * Returns false if keytar is not installed or the keychain daemon is not running.
+ * Returns false if @napi-rs/keyring is not installed or the keychain daemon
+ * is not running.
  */
 export async function isKeychainAvailable(): Promise<boolean> {
   try {
-    const keytar = await getKeytar();
-    if (!keytar) return false;
-    // Probe call — will throw if no keychain daemon
-    await keytar.getPassword(SERVICE_NAME, "__probe__");
+    const keyring = await getKeyring();
+    if (!keyring) return false;
+    // Probe call — will throw if no keychain daemon is running
+    const probe = new keyring.Entry(SERVICE_NAME, "__probe__");
+    probe.getPassword();
     return true;
   } catch {
     return false;
@@ -69,17 +78,14 @@ export async function isKeychainAvailable(): Promise<boolean> {
  */
 export async function loadCredentials(): Promise<{ password: string; smtpToken: string } | null> {
   try {
-    const keytar = await getKeytar();
-    if (!keytar) return null;
+    const keyring = await getKeyring();
+    if (!keyring) return null;
 
-    const password = await keytar.getPassword(SERVICE_NAME, KEY_PASSWORD);
-    const smtpToken = await keytar.getPassword(SERVICE_NAME, KEY_SMTP_TOKEN);
+    const password = new keyring.Entry(SERVICE_NAME, KEY_PASSWORD).getPassword() ?? "";
+    const smtpToken = new keyring.Entry(SERVICE_NAME, KEY_SMTP_TOKEN).getPassword() ?? "";
 
     if (!password && !smtpToken) return null;
-    return {
-      password: password ?? "",
-      smtpToken: smtpToken ?? "",
-    };
+    return { password, smtpToken };
   } catch {
     return null;
   }
@@ -91,14 +97,14 @@ export async function loadCredentials(): Promise<{ password: string; smtpToken: 
  */
 export async function saveCredentials(password: string, smtpToken: string): Promise<boolean> {
   try {
-    const keytar = await getKeytar();
-    if (!keytar) return false;
+    const keyring = await getKeyring();
+    if (!keyring) return false;
 
     if (password) {
-      await keytar.setPassword(SERVICE_NAME, KEY_PASSWORD, password);
+      new keyring.Entry(SERVICE_NAME, KEY_PASSWORD).setPassword(password);
     }
     if (smtpToken) {
-      await keytar.setPassword(SERVICE_NAME, KEY_SMTP_TOKEN, smtpToken);
+      new keyring.Entry(SERVICE_NAME, KEY_SMTP_TOKEN).setPassword(smtpToken);
     }
     return true;
   } catch {
@@ -112,11 +118,11 @@ export async function saveCredentials(password: string, smtpToken: string): Prom
  */
 export async function deleteCredentials(): Promise<boolean> {
   try {
-    const keytar = await getKeytar();
-    if (!keytar) return false;
+    const keyring = await getKeyring();
+    if (!keyring) return false;
 
-    await keytar.deletePassword(SERVICE_NAME, KEY_PASSWORD);
-    await keytar.deletePassword(SERVICE_NAME, KEY_SMTP_TOKEN);
+    new keyring.Entry(SERVICE_NAME, KEY_PASSWORD).deletePassword();
+    new keyring.Entry(SERVICE_NAME, KEY_SMTP_TOKEN).deletePassword();
     return true;
   } catch {
     return false;

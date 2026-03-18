@@ -6,8 +6,8 @@ import {
 } from "./schema.js";
 
 describe("ALL_TOOLS", () => {
-  it("has exactly 40 entries", () => {
-    expect(ALL_TOOLS).toHaveLength(40);
+  it("has exactly 45 entries", () => {
+    expect(ALL_TOOLS).toHaveLength(45);
   });
 
   it("contains no duplicates", () => {
@@ -32,14 +32,14 @@ describe("ALL_TOOLS", () => {
 });
 
 describe("TOOL_CATEGORIES", () => {
-  it("has exactly 7 categories", () => {
-    expect(Object.keys(TOOL_CATEGORIES)).toHaveLength(7);
+  it("has exactly 8 categories", () => {
+    expect(Object.keys(TOOL_CATEGORIES)).toHaveLength(8);
   });
 
   it("has the expected category names", () => {
     const keys = Object.keys(TOOL_CATEGORIES).sort();
     expect(keys).toEqual(
-      ["actions", "analytics", "deletion", "folders", "reading", "sending", "system"].sort(),
+      ["actions", "analytics", "deletion", "drafts", "folders", "reading", "sending", "system"].sort(),
     );
   });
 
@@ -67,6 +67,7 @@ describe("TOOL_CATEGORIES", () => {
 
   it("has correct risk levels", () => {
     expect(TOOL_CATEGORIES.sending.risk).toBe("moderate");
+    expect(TOOL_CATEGORIES.drafts.risk).toBe("moderate");
     expect(TOOL_CATEGORIES.reading.risk).toBe("safe");
     expect(TOOL_CATEGORIES.folders.risk).toBe("moderate");
     expect(TOOL_CATEGORIES.actions.risk).toBe("moderate");

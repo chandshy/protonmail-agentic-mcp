@@ -151,6 +151,8 @@ export interface SendEmailOptions {
 export interface SearchEmailOptions {
   query?: string;
   folder?: string;
+  /** Search across multiple folders. Use ["*"] to search all folders (capped at 20). */
+  folders?: string[];
   from?: string;
   to?: string;
   subject?: string;
@@ -160,6 +162,29 @@ export interface SearchEmailOptions {
   dateFrom?: string;
   dateTo?: string;
   limit?: number;
+}
+
+/** Options for saving an email as a draft (all fields optional — drafts can be incomplete). */
+export interface SaveDraftOptions {
+  to?: string | string[];
+  cc?: string | string[];
+  bcc?: string | string[];
+  subject?: string;
+  body?: string;
+  isHtml?: boolean;
+  attachments?: EmailAttachment[];
+  inReplyTo?: string;
+  references?: string[];
+}
+
+/** A scheduled email queued for future delivery. */
+export interface ScheduledEmail {
+  id: string;
+  scheduledAt: string; // ISO 8601
+  options: SendEmailOptions;
+  status: "pending" | "sent" | "failed" | "cancelled";
+  createdAt: string; // ISO 8601
+  error?: string;
 }
 
 export interface ConnectionStatus {

@@ -25,6 +25,7 @@ import { ProtonMailConfig, EmailMessage } from "./types/index.js";
 import { SMTPService } from "./services/smtp-service.js";
 import { SimpleIMAPService } from "./services/simple-imap-service.js";
 import { AnalyticsService } from "./services/analytics-service.js";
+import { SchedulerService } from "./services/scheduler.js";
 import { logger } from "./utils/logger.js";
 import { isValidEmail } from "./utils/helpers.js";
 import { permissions } from "./permissions/manager.js";
@@ -97,6 +98,10 @@ const config: ProtonMailConfig = {
 const smtpService = new SMTPService(config);
 const imapService = new SimpleIMAPService();
 const analyticsService = new AnalyticsService();
+
+const SCHEDULER_STORE = process.env.PROTONMAIL_SCHEDULER_STORE
+  || `${process.env.HOME || process.env.USERPROFILE || "."}/.protonmail-mcp-scheduled.json`;
+const schedulerService = new SchedulerService(smtpService, SCHEDULER_STORE);
 
 // ─── SMTP Connection Status ───────────────────────────────────────────────────
 // Tracks the result of the last SMTP verify attempt so get_connection_status
@@ -445,12 +450,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         name: "search_emails",
         title: "Search Emails",
         description:
-          "Search emails in a folder by sender, recipient, subject, date range, read/starred status, or attachment presence. Returns summary fields. Use get_email_by_id for full content of results.",
+          "Search emails by sender, recipient, subject, date range, read/starred status, or attachment presence. Use `folder` for a single folder or `folders` for multiple (pass [\"*\"] to search all). Returns summary fields. Use get_email_by_id for full content.",
         annotations: { readOnlyHint: true, openWorldHint: true },
         inputSchema: {
           type: "object",
           properties: {
-            folder: { type: "string", default: "INBOX" },
+            folder: { type: "string", default: "INBOX", description: "Single folder to search (ignored if `folders` is set)" },
+            folders: {
+              type: "array",
+              items: { type: "string" },
+              description: "Search multiple folders. Use [\"*\"] to search all folders (capped at 20). Overrides `folder`.",
+            },
             from: { type: "string", description: "Filter by sender address or name" },
             to: { type: "string", description: "Filter by recipient address" },
             subject: { type: "string", description: "Filter by subject text" },
@@ -1136,6 +1146,139 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         },
       },
 
+      // ── Drafts & Scheduling ────────────────────────────────────────────────
+      {
+        name: "save_draft",
+        title: "Save Draft",
+        description:
+          "Save an email as a draft in the Drafts folder without sending it. All fields are optional — drafts can be incomplete. Returns the server-assigned UID.",
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+        inputSchema: {
+          type: "object",
+          properties: {
+            to: { type: "string", description: "Recipient address(es), comma-separated" },
+            cc: { type: "string", description: "CC addresses, comma-separated" },
+            bcc: { type: "string", description: "BCC addresses, comma-separated" },
+            subject: { type: "string", description: "Email subject line" },
+            body: { type: "string", description: "Email body (plain text or HTML)" },
+            isHtml: { type: "boolean", default: false },
+            attachments: { type: "array", description: "Attachments as objects with filename, content (base64), contentType" },
+            inReplyTo: { type: "string", description: "Message-ID this is a reply to" },
+            references: { type: "array", items: { type: "string" }, description: "Thread reference Message-IDs" },
+          },
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            uid: { type: "number", description: "IMAP UID assigned to the draft" },
+            error: { type: "string" },
+          },
+          required: ["success"],
+        },
+      },
+      {
+        name: "schedule_email",
+        title: "Schedule Email",
+        description:
+          "Queue an email for future delivery. The email will be sent automatically at send_at (ISO 8601). Must be at least 60 seconds in the future and no more than 30 days out. Returns a schedule ID.",
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false },
+        inputSchema: {
+          type: "object",
+          properties: {
+            to: { type: "string", description: "Recipient address(es), comma-separated" },
+            subject: { type: "string", description: "Email subject line" },
+            body: { type: "string", description: "Email body (plain text or HTML)" },
+            send_at: { type: "string", description: "ISO 8601 datetime when to send (e.g. 2026-03-18T09:00:00Z)" },
+            cc: { type: "string", description: "CC addresses, comma-separated" },
+            bcc: { type: "string", description: "BCC addresses, comma-separated" },
+            isHtml: { type: "boolean", default: false },
+            priority: { type: "string", enum: ["high", "normal", "low"] },
+            replyTo: { type: "string", description: "Reply-to address" },
+            attachments: { type: "array", description: "Attachments as objects with filename, content (base64), contentType" },
+          },
+          required: ["to", "subject", "body", "send_at"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            success: { type: "boolean" },
+            id: { type: "string", description: "Schedule ID — use with cancel_scheduled_email" },
+            scheduledAt: { type: "string", format: "date-time" },
+          },
+          required: ["success", "id"],
+        },
+      },
+      {
+        name: "list_scheduled_emails",
+        title: "List Scheduled Emails",
+        description: "List all scheduled emails (pending, sent, failed, and cancelled). Sorted by scheduledAt ascending.",
+        annotations: { readOnlyHint: true },
+        inputSchema: { type: "object", properties: {} },
+        outputSchema: {
+          type: "object",
+          properties: {
+            scheduled: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  id: { type: "string" },
+                  scheduledAt: { type: "string", format: "date-time" },
+                  status: { type: "string", enum: ["pending", "sent", "failed", "cancelled"] },
+                  subject: { type: "string" },
+                  to: { type: "string" },
+                  createdAt: { type: "string", format: "date-time" },
+                  error: { type: "string" },
+                },
+              },
+            },
+            count: { type: "number" },
+          },
+          required: ["scheduled", "count"],
+        },
+      },
+      {
+        name: "cancel_scheduled_email",
+        title: "Cancel Scheduled Email",
+        description: "Cancel a pending scheduled email before it is sent. Returns false if the ID is not found or the email has already been sent.",
+        annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Schedule ID from schedule_email or list_scheduled_emails" },
+          },
+          required: ["id"],
+        },
+        outputSchema: ACTION_RESULT_SCHEMA,
+      },
+      {
+        name: "download_attachment",
+        title: "Download Attachment",
+        description:
+          "Download the binary content of an email attachment as a base64-encoded string. Use get_email_by_id first to see available attachments and their indices (0-based).",
+        annotations: { readOnlyHint: true, openWorldHint: true },
+        inputSchema: {
+          type: "object",
+          properties: {
+            email_id: { type: "string", description: "IMAP UID of the email" },
+            attachment_index: { type: "number", description: "0-based index of the attachment (from get_email_by_id attachments array)" },
+          },
+          required: ["email_id", "attachment_index"],
+        },
+        outputSchema: {
+          type: "object",
+          properties: {
+            filename: { type: "string" },
+            contentType: { type: "string" },
+            size: { type: "number" },
+            content: { type: "string", description: "Base64-encoded attachment content" },
+            encoding: { type: "string", enum: ["base64"] },
+          },
+          required: ["filename", "contentType", "size", "content", "encoding"],
+        },
+      },
+
       // ── Permission Escalation (always-available meta-tools) ────────────────
       {
         name: "request_permission_escalation",
@@ -1500,8 +1643,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "search_emails": {
         const folder = (args.folder as string) || "INBOX";
+        const folders = args.folders as string[] | undefined;
         const results = await imapService.searchEmails({
-          folder,
+          folder: folders ? undefined : folder,
+          folders,
           from: args.from as string | undefined,
           to: args.to as string | undefined,
           subject: args.subject as string | undefined,
@@ -1512,7 +1657,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           dateTo: args.dateTo as string | undefined,
           limit: Math.min(Math.max(1, (args.limit as number) || 50), 200),
         });
-        return ok({ emails: results, count: results.length, folder });
+        const searchedIn = folders ? folders.join(", ") : folder;
+        return ok({ emails: results, count: results.length, folder: searchedIn });
       }
 
       case "get_unread_count": {
@@ -1554,6 +1700,95 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const lblStructured = { emails: lblEmails, folder: lblFolder, count: lblEmails.length, ...(lblNextCursor ? { nextCursor: lblNextCursor } : {}) };
         return ok(lblStructured);
+      }
+
+      // ── Drafts & Scheduling ───────────────────────────────────────────────────
+
+      case "save_draft": {
+        const saveDraftPerm = permissions.check("save_draft" as ToolName);
+        if (!saveDraftPerm.allowed) {
+          return { content: [{ type: "text" as const, text: `Permission denied: ${saveDraftPerm.reason ?? "save_draft not allowed"}` }], isError: true, structuredContent: { success: false, reason: saveDraftPerm.reason } };
+        }
+        const draftResult = await imapService.saveDraft({
+          to: args.to as string | undefined,
+          cc: args.cc as string | undefined,
+          bcc: args.bcc as string | undefined,
+          subject: args.subject as string | undefined,
+          body: args.body as string | undefined,
+          isHtml: args.isHtml as boolean | undefined,
+          attachments: args.attachments as any | undefined,
+          inReplyTo: args.inReplyTo as string | undefined,
+          references: args.references as string[] | undefined,
+        });
+        if (!draftResult.success) {
+          return { content: [{ type: "text" as const, text: `Failed to save draft: ${draftResult.error}` }], isError: true, structuredContent: { success: false, reason: draftResult.error } };
+        }
+        return ok({ success: true, uid: draftResult.uid }, `Draft saved (UID: ${draftResult.uid ?? "unknown"})`);
+      }
+
+      case "schedule_email": {
+        const schedPerm = permissions.check("schedule_email" as ToolName);
+        if (!schedPerm.allowed) {
+          return { content: [{ type: "text" as const, text: `Permission denied: ${schedPerm.reason ?? "schedule_email not allowed"}` }], isError: true, structuredContent: { success: false, reason: schedPerm.reason } };
+        }
+        const sendAtStr = args.send_at as string;
+        if (!sendAtStr) {
+          return { content: [{ type: "text" as const, text: "send_at is required" }], isError: true, structuredContent: { success: false, reason: "send_at is required" } };
+        }
+        const sendAt = new Date(sendAtStr);
+        if (isNaN(sendAt.getTime())) {
+          return { content: [{ type: "text" as const, text: `Invalid send_at date: ${sendAtStr}` }], isError: true, structuredContent: { success: false, reason: "Invalid date" } };
+        }
+        try {
+          const schedId = schedulerService.schedule({
+            to: args.to as string,
+            cc: args.cc as string | undefined,
+            bcc: args.bcc as string | undefined,
+            subject: args.subject as string,
+            body: args.body as string,
+            isHtml: args.isHtml as boolean | undefined,
+            priority: args.priority as "high" | "normal" | "low" | undefined,
+            replyTo: args.replyTo as string | undefined,
+            attachments: args.attachments as any | undefined,
+          }, sendAt);
+          return ok({ success: true, id: schedId, scheduledAt: sendAt.toISOString() },
+            `Scheduled for ${sendAt.toISOString()} (ID: ${schedId})`);
+        } catch (err: any) {
+          return { content: [{ type: "text" as const, text: err.message }], isError: true, structuredContent: { success: false, reason: err.message } };
+        }
+      }
+
+      case "list_scheduled_emails": {
+        const allScheduled = schedulerService.list();
+        const summary = allScheduled.map(s => ({
+          id: s.id,
+          scheduledAt: s.scheduledAt,
+          status: s.status,
+          subject: (s.options as any).subject,
+          to: Array.isArray((s.options as any).to) ? (s.options as any).to.join(", ") : (s.options as any).to,
+          createdAt: s.createdAt,
+          error: s.error,
+        }));
+        return ok({ scheduled: summary, count: summary.length });
+      }
+
+      case "cancel_scheduled_email": {
+        const cancelled = schedulerService.cancel(args.id as string);
+        if (!cancelled) {
+          return { content: [{ type: "text" as const, text: "Not found or not pending" }], isError: true, structuredContent: { success: false, reason: "Not found or not pending" } };
+        }
+        return actionOk();
+      }
+
+      case "download_attachment": {
+        const attResult = await imapService.downloadAttachment(
+          args.email_id as string,
+          args.attachment_index as number,
+        );
+        if (!attResult) {
+          return { content: [{ type: "text" as const, text: "Attachment not found" }], isError: true, structuredContent: { success: false, reason: "Attachment not found" } };
+        }
+        return ok(attResult, `Attachment: ${attResult.filename} (${attResult.contentType}, ${attResult.size} bytes)`);
       }
 
       // ── Folder Management ─────────────────────────────────────────────────────
@@ -2334,6 +2569,9 @@ async function main() {
       logger.info("Ensure Proton Bridge is running on localhost:1143", "MCPServer");
     }
 
+    // Start the email scheduler (loads persisted pending emails, begins 60s poll)
+    schedulerService.start();
+
     const transport = new StdioServerTransport();
     await server.connect(transport);
     logger.info("Proton Mail MCP Server started. Tools, Resources, and Prompts are available.", "MCPServer");
@@ -2356,11 +2594,14 @@ process.on("unhandledRejection", (reason) => {
 async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}, shutting down gracefully...`, "MCPServer");
   try {
-    // 1. Disconnect services
+    // 1. Stop scheduler (persists pending items before close)
+    schedulerService.stop();
+
+    // 2. Disconnect services
     await imapService.disconnect();
     await smtpService.close();
 
-    // 2. Scrub sensitive data from memory
+    // 3. Scrub sensitive data from memory
     imapService.wipeCache();
     analyticsService.wipeData();
     smtpService.wipeCredentials();

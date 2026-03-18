@@ -8,7 +8,7 @@
 
 Give Claude AI — or any MCP-compatible AI agent — secure, controlled access to your ProtonMail inbox via [Proton Bridge](https://proton.me/mail/bridge).
 
-**40 tools · MCP Resources · MCP Prompts · Permission presets · Per-tool rate limiting · Human-gated escalation · Browser-based settings UI**
+**45 tools · MCP Resources · MCP Prompts · Permission presets · Per-tool rate limiting · Human-gated escalation · Browser-based settings UI**
 
 ---
 
@@ -126,7 +126,7 @@ Choose how much the AI is allowed to do:
 | **Read-Only** *(default)* | Read, search, analytics, connection status | Starting out, untrusted agents |
 | **Supervised** | All tools; deletion capped at 5/hr, sending at 20/hr | Day-to-day agentic use |
 | **Send-Only** | Reading + sending only, no deletion or folder writes | Agents that only need to send |
-| **Full Access** | All 40 tools, no rate limits | Trusted workflows where you review actions |
+| **Full Access** | All 45 tools, no rate limits | Trusted workflows where you review actions |
 
 You can change this at any time from the **Permissions** tab.
 
@@ -209,11 +209,12 @@ If any of these fail, see the [Troubleshooting](#9-troubleshooting) section belo
 |---|---|
 | `get_emails` | Fetch emails from any folder with cursor pagination |
 | `get_email_by_id` | Get a single email with full body and headers |
-| `search_emails` | Search by subject, sender, body, date range, read status, attachments |
+| `search_emails` | Search by subject, sender, body, date range, read status, attachments; supports `folders: ["*"]` to search all folders |
 | `get_folders` | List all folders with message counts and unread counts |
 | `get_unread_count` | Cheap per-folder unread count — call before `get_emails` to decide whether to fetch |
 | `list_labels` | List all ProtonMail labels with message counts |
 | `get_emails_by_label` | Fetch emails from a specific label folder with cursor pagination |
+| `download_attachment` | Download attachment binary content as base64 (use attachment_index from `get_email_by_id`) |
 
 ### Analytics (read-only — always available)
 
@@ -241,6 +242,15 @@ If any of these fail, see the [Troubleshooting](#9-troubleshooting) section belo
 | `send_test_email` | Send a test email to verify SMTP is working |
 | `reply_to_email` | Reply to an email (sets In-Reply-To and References headers) |
 | `forward_email` | Forward an email to a new recipient with optional message |
+
+### Drafts & Scheduling (requires supervised, send_only, or full preset)
+
+| Tool | Description |
+|---|---|
+| `save_draft` | Save an incomplete or complete email as a draft (IMAP APPEND to Drafts folder) |
+| `schedule_email` | Queue an email for delivery at a future time (ISO 8601, 60s–30 days out) |
+| `list_scheduled_emails` | List all scheduled emails (pending, sent, failed, cancelled) |
+| `cancel_scheduled_email` | Cancel a pending scheduled email before it sends |
 
 ### Actions (requires supervised or full preset)
 
