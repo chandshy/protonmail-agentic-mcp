@@ -4,6 +4,26 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #44 — folderCache TTL + coverage thresholds + CHANGELOG
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commit:** a4c20fd
+
+### Work Completed
+1. **folderCache TTL** — added `folderCachedAt` timestamp and `clearFolderCache()` helper; `getFolders()` returns cached data within 5-minute TTL without IMAP round-trip; all 5 mutation sites reset the timestamp
+2. **7 new TTL tests** — folder-management.test.ts grows from 16 to 23 tests
+3. **Vitest coverage thresholds** — statements 45%, branches 38%, functions 50%, lines 47% floor in `vitest.config.ts`
+4. **CHANGELOG** — updated `[Unreleased]` to cover Cycles #1–#43; added Cycle #42 (byte-size cache) and #43 (tray.ts ambient types) entries
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 861/861 passed (+7 new)
+
+### Git Status
+Pushed. Commit `a4c20fd` on `main`.
+
+---
+
 ## Cycle #43 — Eliminate last any types in tray.ts (loop end)
 **Timestamp:** 2026-03-18
 **Branch:** main

@@ -207,7 +207,7 @@ function safeErrorMessage(error: unknown): string {
 function diagnosticErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "Unknown error";
   const parts: string[] = [];
-  const e = error as any;
+  const e = error as { code?: unknown; command?: unknown; responseCode?: unknown };
   if (e.code) parts.push(`code=${e.code}`);
   if (e.command) parts.push(`command=${e.command}`);
   if (e.responseCode) parts.push(`responseCode=${e.responseCode}`);
