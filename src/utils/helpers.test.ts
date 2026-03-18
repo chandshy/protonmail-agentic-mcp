@@ -2451,4 +2451,177 @@ describe('helpers', () => {
       expect(isCursorTypeInvalid(['cursor'])).toBe(true);
     });
   });
+
+  // ── Cycle #30: send_email / schedule_email 'replyTo' validation ─────────────
+  // send_email and schedule_email both pass args.replyTo raw to the SMTP service /
+  // scheduler without any handler-level format check.  The SMTP service validates it,
+  // but only throws a plain Error that surfaces as "Email delivery failed" rather than
+  // a clear McpError(InvalidParams).  For schedule_email the problem is worse: an
+  // invalid replyTo is stored in the scheduler and only fails when the job fires.
+  //
+  // The new guard:
+  //   if (args.replyTo !== undefined && (typeof args.replyTo !== "string" || !isValidEmail(args.replyTo)))
+  //     throw new McpError(ErrorCode.InvalidParams, "'replyTo' must be a valid email address.")
+
+  describe("send_email / schedule_email 'replyTo' handler-level validation (Cycle #30)", () => {
+    // Replicates the combined guard logic inline using the real isValidEmail helper.
+    function isReplyToInvalid(v: unknown): boolean {
+      if (v === undefined) return false;                   // omitted → fine
+      if (typeof v !== 'string') return true;             // non-string → invalid
+      return !isValidEmail(v);                            // string but bad format
+    }
+
+    it('undefined is accepted (replyTo is optional)', () => {
+      expect(isReplyToInvalid(undefined)).toBe(false);
+    });
+
+    it('valid email "user@example.com" is accepted', () => {
+      expect(isReplyToInvalid('user@example.com')).toBe(false);
+    });
+
+    it('valid email with subdomain is accepted', () => {
+      expect(isReplyToInvalid('noreply@mail.example.org')).toBe(false);
+    });
+
+    it('plain string "not-an-email" triggers guard', () => {
+      expect(isReplyToInvalid('not-an-email')).toBe(true);
+    });
+
+    it('empty string triggers guard (no local part)', () => {
+      expect(isReplyToInvalid('')).toBe(true);
+    });
+
+    it('number 42 triggers guard (wrong type)', () => {
+      expect(isReplyToInvalid(42)).toBe(true);
+    });
+
+    it('boolean true triggers guard (wrong type)', () => {
+      expect(isReplyToInvalid(true)).toBe(true);
+    });
+
+    it('null triggers guard (wrong type)', () => {
+      expect(isReplyToInvalid(null)).toBe(true);
+    });
+
+    it('plain object triggers guard (wrong type)', () => {
+      expect(isReplyToInvalid({ email: 'user@example.com' })).toBe(true);
+    });
+
+    it('address missing domain triggers guard', () => {
+      expect(isReplyToInvalid('user@')).toBe(true);
+    });
+
+    it('address with CRLF injection triggers guard (control char rejected by isValidEmail)', () => {
+      expect(isReplyToInvalid('user@example.com\r\nBcc: evil@x.com')).toBe(true);
+    });
+  });
+
+  // ── Cycle #30: send_email / save_draft / schedule_email subject type guard ───
+  // The RFC 2822 subject length guard (Cycle #26) was:
+  //   args.subject !== undefined && typeof args.subject === "string" && subject.length > 998
+  // A non-string value (e.g. a number) satisfies `!== undefined` but not
+  // `typeof === "string"`, so the condition evaluates false and the value silently
+  // passes through to be cast as string downstream.  The new type guard fires first:
+  //   if (args.subject !== undefined && typeof args.subject !== "string")
+  //     throw new McpError(ErrorCode.InvalidParams, "'subject' must be a string.")
+
+  describe("send_email / save_draft / schedule_email 'subject' non-string type guard (Cycle #30)", () => {
+    // Replicates the new guard:
+    //   args.subject !== undefined && typeof args.subject !== "string" → fire
+    function isSubjectWrongType(v: unknown): boolean {
+      return v !== undefined && typeof v !== 'string';
+    }
+
+    it('undefined is accepted (omitted subject is fine for save_draft)', () => {
+      expect(isSubjectWrongType(undefined)).toBe(false);
+    });
+
+    it('string subject "Hello" is accepted', () => {
+      expect(isSubjectWrongType('Hello')).toBe(false);
+    });
+
+    it('empty string is accepted (emptiness is a separate concern)', () => {
+      expect(isSubjectWrongType('')).toBe(false);
+    });
+
+    it('number 42 triggers guard', () => {
+      expect(isSubjectWrongType(42)).toBe(true);
+    });
+
+    it('number 0 triggers guard', () => {
+      expect(isSubjectWrongType(0)).toBe(true);
+    });
+
+    it('boolean true triggers guard', () => {
+      expect(isSubjectWrongType(true)).toBe(true);
+    });
+
+    it('boolean false triggers guard', () => {
+      expect(isSubjectWrongType(false)).toBe(true);
+    });
+
+    it('null triggers guard', () => {
+      expect(isSubjectWrongType(null)).toBe(true);
+    });
+
+    it('plain object triggers guard', () => {
+      expect(isSubjectWrongType({ text: 'hello' })).toBe(true);
+    });
+
+    it('array triggers guard', () => {
+      expect(isSubjectWrongType(['hello'])).toBe(true);
+    });
+  });
+
+  // ── Cycle #30: save_draft 'to' field type guard ──────────────────────────────
+  // save_draft accepts 'to' as an optional field (a draft may be addressed later).
+  // The field was previously unchecked: any non-string type (e.g. an array of
+  // addresses, a number) would be silently cast to string and forwarded to the
+  // IMAP saveDraft layer as a malformed address string.  The new guard:
+  //   if (args.to !== undefined && typeof args.to !== "string")
+  //     throw new McpError(ErrorCode.InvalidParams, "'to' must be a string when provided.")
+
+  describe("save_draft 'to' field type guard (Cycle #30)", () => {
+    // Replicates the guard:
+    //   args.to !== undefined && typeof args.to !== "string" → fire
+    function isToWrongType(v: unknown): boolean {
+      return v !== undefined && typeof v !== 'string';
+    }
+
+    it('undefined is accepted (omitted — draft may be addressed later)', () => {
+      expect(isToWrongType(undefined)).toBe(false);
+    });
+
+    it('valid email string is accepted', () => {
+      expect(isToWrongType('user@example.com')).toBe(false);
+    });
+
+    it('comma-separated string is accepted (format validated downstream)', () => {
+      expect(isToWrongType('a@b.com, c@d.com')).toBe(false);
+    });
+
+    it('empty string is accepted (emptiness is separate from type guard)', () => {
+      expect(isToWrongType('')).toBe(false);
+    });
+
+    it('number 42 triggers guard', () => {
+      expect(isToWrongType(42)).toBe(true);
+    });
+
+    it('boolean true triggers guard', () => {
+      expect(isToWrongType(true)).toBe(true);
+    });
+
+    it('null triggers guard', () => {
+      expect(isToWrongType(null)).toBe(true);
+    });
+
+    it('array of strings triggers guard (must be comma-separated string, not array)', () => {
+      expect(isToWrongType(['user@example.com'])).toBe(true);
+    });
+
+    it('plain object triggers guard', () => {
+      expect(isToWrongType({ address: 'user@example.com' })).toBe(true);
+    });
+  });
 });

@@ -315,4 +315,17 @@ When `args.oldName === args.newName`, the handler issued a spurious IMAP RENAME 
 ### [DONE - Cycle 29] `get_emails` / `get_emails_by_label` — `cursor` not type-checked
 Both pagination handlers used `if (args.cursor)` (truthy) then `args.cursor as string` cast without `typeof` check. A non-string value (e.g., number `50`) would be truthy, pass the check, and produce the generic "Invalid or expired cursor" error response instead of a clear type error. Added `if (args.cursor !== undefined && typeof args.cursor !== "string") throw McpError(InvalidParams, "'cursor' must be a string.")` in both handlers.
 
-IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 29 cycles
+---
+
+## NEW — Cycle #30 Findings (all completed in Cycle #30)
+
+### [DONE - Cycle 30] `send_email` / `schedule_email` — `replyTo` field no handler-level isValidEmail check
+Both handlers forwarded `args.replyTo as string | undefined` to the SMTP service / scheduler without any format check. The SMTP service validates it but returns an opaque "Email delivery failed" result. For `schedule_email` an invalid replyTo is stored in the scheduler and only fails at send-time (silent failure). Added `isValidEmail()` guard in both handlers → `McpError(InvalidParams, "'replyTo' must be a valid email address.")`.
+
+### [DONE - Cycle 30] `send_email` / `save_draft` / `schedule_email` — `subject` non-string type guard
+The length cap (Cycle #26) used `typeof args.subject === "string"` in the condition, so non-string values (numbers, objects) silently bypassed the check and were cast to string downstream. Added a dedicated type guard `if (args.subject !== undefined && typeof args.subject !== "string") throw McpError(InvalidParams, "'subject' must be a string.")` before the length check in all three handlers.
+
+### [DONE - Cycle 30] `save_draft` — `to` field type guard when provided
+`save_draft` accepted `to` as optional with no type check. A non-string `to` (array, number) was silently cast and forwarded to the IMAP saveDraft layer. Added `if (args.to !== undefined && typeof args.to !== "string") throw McpError(InvalidParams, "'to' must be a string when provided.")`.
+
+IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 30 cycles

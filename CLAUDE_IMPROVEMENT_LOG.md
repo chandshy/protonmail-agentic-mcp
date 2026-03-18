@@ -4,6 +4,35 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #30 — replyTo handler-level validation, subject non-string type guard, save_draft to type guard
+**Timestamp:** 2026-03-18
+**Branch:** main
+
+### Audit Highlights
+
+**Build & Tests (pre-work):** Clean build, 653/653 tests passing.
+
+**New Findings (all corrected this cycle):**
+
+1. **`send_email` / `schedule_email` — `replyTo` field has no handler-level `isValidEmail()` guard** — Both handlers passed `args.replyTo as string | undefined` directly to the SMTP service / scheduler without any format validation. The SMTP service does validate `replyTo` but throws a plain `Error`, which surfaces as an opaque `"Email delivery failed"` result rather than a clear `McpError(InvalidParams)`. For `schedule_email` the problem is worse: an invalid `replyTo` is stored in the scheduler and only fails when the job actually fires, resulting in a silent scheduled-job failure with no feedback to the caller. Added `if (args.replyTo !== undefined && (typeof args.replyTo !== "string" || !isValidEmail(args.replyTo))) throw new McpError(ErrorCode.InvalidParams, "'replyTo' must be a valid email address.")` in both handlers, consistent with the handler-level `isValidEmail()` guard already present in `send_test_email`.
+
+2. **`send_email` / `save_draft` / `schedule_email` — `subject` field missing non-string type guard** — The RFC 2822 subject length cap (Cycle #26) used the compound condition `args.subject !== undefined && typeof args.subject === "string" && subject.length > 998`. A non-string value (e.g., a number `42`) satisfies `!== undefined` but not `typeof === "string"`, so the length check never fires and the value silently passes through to be cast as string downstream — e.g., `args.subject as string` at the SMTP call site yields `"42"` with no error. Added a separate type guard `if (args.subject !== undefined && typeof args.subject !== "string") throw new McpError(ErrorCode.InvalidParams, "'subject' must be a string.")` before the length check in all three handlers, consistent with the non-string type guards added for `limit`, `cursor`, `days`, etc. in Cycles #24–#29.
+
+3. **`save_draft` — `to` field has no type guard when provided** — `save_draft` accepts `to` as an optional field (a draft may be addressed later), but when `to` is provided the handler cast it directly as `string | undefined` with no type check. A non-string value (e.g., an array `["user@example.com"]` or a number) would be silently converted to a malformed string (`"user@example.com"` → `"user@example.com"`, a number → `"42"`) and forwarded to `imapService.saveDraft()`. Added `if (args.to !== undefined && typeof args.to !== "string") throw new McpError(ErrorCode.InvalidParams, "'to' must be a string when provided.")`, consistent with the optional-field type guards for `body` (Cycle #28) and `cursor` (Cycle #29).
+
+### Changes
+
+- `src/index.ts`: Added `replyTo` isValidEmail guard in `send_email` (5 lines + comment). Added subject non-string type guard in `send_email` (4 lines + comment). Added subject non-string type guard in `save_draft` (4 lines + comment). Added `to` type guard in `save_draft` (4 lines + comment). Added subject non-string type guard in `schedule_email` (4 lines + comment). Added `replyTo` isValidEmail guard in `schedule_email` (5 lines + comment).
+- `src/utils/helpers.test.ts`: Added 30 new tests covering all three guard paths: `replyTo` validation (11 tests), `subject` non-string type guard (10 tests), `save_draft` `to` type guard (9 tests).
+
+### Test Results
+
+**Before:** 653 tests passing
+**After:** 683 tests passing (+30)
+**Build:** Clean (0 TypeScript errors)
+
+---
+
 ## Cycle #29 — forward_email subject length cap, rename_folder same-name guard, cursor type guards
 **Timestamp:** 2026-03-18
 **Branch:** main

@@ -1582,6 +1582,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         // RFC 2822 §2.1.1 — header lines SHOULD be ≤998 characters (hard limit).
         // A multi-kilobyte subject causes header bloat and may be rejected by MTAs.
+        // Type guard first: a non-string subject (e.g. a number) would silently
+        // bypass the length check and be cast to string downstream.
+        if (args.subject !== undefined && typeof args.subject !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'subject' must be a string.");
+        }
         if (args.subject !== undefined && typeof args.subject === "string" && (args.subject as string).length > MAX_SUBJECT_LENGTH) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' must not exceed ${MAX_SUBJECT_LENGTH} characters (RFC 2822 limit).`);
         }
@@ -1591,6 +1596,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const VALID_PRIORITIES = new Set(["high", "normal", "low"]);
         if (args.priority !== undefined && !VALID_PRIORITIES.has(args.priority as string)) {
           throw new McpError(ErrorCode.InvalidParams, `'priority' must be one of "high", "normal", or "low".`);
+        }
+        // Validate replyTo at handler level — the SMTP service also validates this,
+        // but that throws a plain Error surfacing as "Email delivery failed" rather
+        // than a clear McpError(InvalidParams).  Early validation gives callers an
+        // actionable error message instead of an opaque delivery failure.
+        if (args.replyTo !== undefined && (typeof args.replyTo !== "string" || !isValidEmail(args.replyTo as string))) {
+          throw new McpError(ErrorCode.InvalidParams, `'replyTo' must be a valid email address.`);
         }
         const result = await smtpService.sendEmail({
           to: args.to as string,
@@ -1896,7 +1908,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "save_draft": {
         const sdAttErr = validateAttachments(args.attachments);
         if (sdAttErr) throw new McpError(ErrorCode.InvalidParams, sdAttErr);
+        // Type guard for 'to' — optional field, but when supplied must be a string.
+        // A non-string value (e.g. an array or number) would be silently cast to string
+        // and forwarded to the IMAP saveDraft layer as a malformed address string.
+        if (args.to !== undefined && typeof args.to !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'to' must be a string when provided.");
+        }
         // RFC 2822 subject length cap (shared with send_email / schedule_email).
+        // Type guard first: a non-string subject (e.g. a number) would silently bypass
+        // the length check and be cast to string downstream (consistent with send_email).
+        if (args.subject !== undefined && typeof args.subject !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'subject' must be a string.");
+        }
         if (args.subject !== undefined && typeof args.subject === "string" && (args.subject as string).length > MAX_SUBJECT_LENGTH) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' must not exceed ${MAX_SUBJECT_LENGTH} characters (RFC 2822 limit).`);
         }
@@ -1937,12 +1960,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new McpError(ErrorCode.InvalidParams, "'body' must be a non-empty string.");
         }
         // RFC 2822 subject length cap (shared with send_email / save_draft).
+        // Type guard first: a non-string subject (e.g. a number) would silently bypass
+        // the length check and be cast to string downstream (consistent with send_email).
+        if (args.subject !== undefined && typeof args.subject !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'subject' must be a string.");
+        }
         if (args.subject !== undefined && typeof args.subject === "string" && (args.subject as string).length > MAX_SUBJECT_LENGTH) {
           throw new McpError(ErrorCode.InvalidParams, `'subject' must not exceed ${MAX_SUBJECT_LENGTH} characters (RFC 2822 limit).`);
         }
         // Validate priority against the declared enum — mirrors the guard in send_email.
         if (args.priority !== undefined && !new Set(["high", "normal", "low"]).has(args.priority as string)) {
           throw new McpError(ErrorCode.InvalidParams, `'priority' must be one of "high", "normal", or "low".`);
+        }
+        // Validate replyTo at handler level — the scheduled job fires asynchronously,
+        // so an invalid replyTo would not fail until the job runs, silently discarding
+        // the send.  Early validation gives callers an actionable McpError(InvalidParams)
+        // rather than a silent scheduled-job failure.
+        if (args.replyTo !== undefined && (typeof args.replyTo !== "string" || !isValidEmail(args.replyTo as string))) {
+          throw new McpError(ErrorCode.InvalidParams, `'replyTo' must be a valid email address.`);
         }
         // Validate send_at as a parseable ISO date string.
         if (!args.send_at || typeof args.send_at !== "string") {
