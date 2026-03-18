@@ -1,7 +1,22 @@
 # Final Security & Quality Audit Report
 ## Codebase: protonmail-mcp-server
 ## Date: 2026-03-18
-## Cycles completed: 33
+## Cycles completed: 34
+
+### Cycle #34 Addendum
+
+Cycle #34 identified and resolved six quality gaps:
+
+1. **`reply_to_email` `body` max-length cap** — Cycle #33 added the `MAX_BODY_LENGTH = 10 MB` cap to `send_email`, `save_draft`, and `schedule_email` but missed `reply_to_email`. A multi-megabyte reply body would exhaust Node.js heap or cause an opaque SMTP timeout. Added the same guard.
+2. **`forward_email` `fwdBody` max-length cap** — The forwarded body is assembled from the user's optional message plus the original email's body (not controlled by the caller). A very large original email body passes unchecked. Added cap after assembly using the same `MAX_BODY_LENGTH`.
+3. **`mark_email_read` `isRead` boolean type guard** — `args.isRead as boolean` with no runtime check. A non-boolean truthy value (e.g. `"yes"`, `1`) silently marked emails read based on JS truthiness. Added `typeof isRead !== "boolean"` guard.
+4. **`star_email` `isStarred` boolean type guard** — Same issue. Added equivalent guard.
+5. **`bulk_mark_read` `isRead` boolean type guard** — Same cast issue in the bulk handler. Added the same guard for consistency.
+6. **`bulk_star` `isStarred` boolean type guard** — Same cast issue in the bulk handler. Added the same guard.
+
+No security findings beyond the above. Build clean. 763/763 tests pass (+26 over Cycle #33 baseline of 737).
+
+---
 
 ### Cycle #33 Addendum
 

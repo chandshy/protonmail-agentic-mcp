@@ -1,6 +1,6 @@
 # TODO Improvements — Prioritized Backlog
 
-Last updated: Cycle #33 (2026-03-18)
+Last updated: Cycle #34 (2026-03-18)
 
 ---
 
@@ -348,6 +348,22 @@ The `LogEntry` interface has an optional `data?: any` field carrying sanitized/r
 
 ### [DONE - Cycle 32] `list_labels` — `(f: any)` cast in array filter
 The `list_labels` filter used `(f: any)` with optional chaining `f.path?.startsWith()`. Since `getFolders()` returns `EmailFolder[]` and `path` is non-optional, the cast was spurious. Replaced with `(f: EmailFolder)` and direct `f.path.startsWith()`. Added `EmailFolder` to the import line.
+
+## NEW — Cycle #34 Findings (all completed in Cycle #34)
+
+### [DONE - Cycle 34] `reply_to_email` — `body` field has no max-length cap
+Cycle #33 added MAX_BODY_LENGTH = 10 MB to send_email, save_draft, and schedule_email but missed reply_to_email. Added the same guard → `McpError(InvalidParams)` for body > 10 MB.
+
+### [DONE - Cycle 34] `forward_email` — forwarded `fwdBody` has no max-length cap
+The composed body (user message + header + original body) was unchecked. A large original email body passes through and can cause OOM/SMTP timeout. Added cap after assembly, same 10 MB limit.
+
+### [DONE - Cycle 34] `mark_email_read` / `bulk_mark_read` — `isRead` field missing boolean type guard
+`args.isRead as boolean` cast with no runtime check. A non-boolean truthy value silently marks email read based on JS truthiness. Added `typeof isRead !== "boolean"` guard in both handlers → `McpError(InvalidParams)`.
+
+### [DONE - Cycle 34] `star_email` / `bulk_star` — `isStarred` field missing boolean type guard
+Same issue as `isRead`. Added equivalent `typeof isStarred !== "boolean"` guard in both handlers → `McpError(InvalidParams)`. Consistent with `isHtml` guards (Cycle #33) and `isRead` guards above.
+
+---
 
 ## NEW — Cycle #33 Findings (all completed in Cycle #33)
 

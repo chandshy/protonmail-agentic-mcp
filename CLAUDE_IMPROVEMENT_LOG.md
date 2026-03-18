@@ -4,6 +4,41 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #34 — isRead/isStarred boolean type guards, body max-length for reply_to_email and forward_email
+**Timestamp:** 2026-03-18
+**Branch:** main
+
+### Audit Highlights
+
+**Build & Tests (pre-work):** Clean build, 737/737 tests passing.
+
+**New Findings (all corrected this cycle):**
+
+1. **`reply_to_email` — `body` field has no max-length cap** — Cycle #33 added a `MAX_BODY_LENGTH = 10 MB` cap to `send_email`, `save_draft`, and `schedule_email`, but `reply_to_email` was missed. A caller supplying a multi-megabyte reply body would exhaust Node.js heap or produce an opaque SMTP timeout rather than a clear `McpError(InvalidParams)`. Added the same guard: `if ((args.body as string).length > MAX_BODY_LENGTH) throw new McpError(ErrorCode.InvalidParams, "'body' must not exceed 10 MB.")`.
+
+2. **`forward_email` — forwarded body `fwdBody` has no max-length cap** — The forwarded body is assembled from the optional user `message` + a header block + the original email's body (which the handler does not control). A very large original email body passes through unchecked and can produce the same OOM/SMTP-timeout failure mode. Added guard `if (fwdBody.length > MAX_BODY_LENGTH) throw new McpError(ErrorCode.InvalidParams, "Forwarded body must not exceed 10 MB.")` after `fwdBody` is assembled, consistent with all other senders.
+
+3. **`mark_email_read` — `isRead` field missing boolean type guard** — `args.isRead !== undefined ? (args.isRead as boolean) : true` with no runtime type check. A caller supplying `isRead: "yes"` or `isRead: 1` passes the ternary check (value is defined), is cast directly to boolean via TypeScript `as boolean`, and is forwarded to `imapService.markEmailRead()`. JS evaluates both as truthy, so the email is silently marked read regardless of intent, with no error to the caller. Added `if (args.isRead !== undefined && typeof args.isRead !== "boolean") throw new McpError(ErrorCode.InvalidParams, "'isRead' must be a boolean when provided.")`, consistent with the `isHtml` guards added in Cycle #33.
+
+4. **`star_email` — `isStarred` field missing boolean type guard** — Identical issue: `args.isStarred as boolean` with no type check. A non-boolean truthy value silently marks the email starred. Added the equivalent guard: `if (args.isStarred !== undefined && typeof args.isStarred !== "boolean") throw new McpError(ErrorCode.InvalidParams, "'isStarred' must be a boolean when provided.")`.
+
+5. **`bulk_mark_read` — `isRead` field missing boolean type guard** — Same `args.isRead as boolean` cast without type check. Added the same guard as `mark_email_read`, consistent with fixing the single-item handler.
+
+6. **`bulk_star` — `isStarred` field missing boolean type guard** — Same `args.isStarred as boolean` cast without type check. Added the same guard as `star_email`.
+
+### Changes
+
+- `src/index.ts`: Added body max-length guard in `reply_to_email` (5 lines + comment). Added forwarded body max-length guard in `forward_email` (5 lines + comment). Added `isRead` type guard in `mark_email_read` (5 lines + comment). Added `isStarred` type guard in `star_email` (4 lines + comment). Added `isRead` type guard in `bulk_mark_read` (4 lines + comment). Added `isStarred` type guard in `bulk_star` (4 lines + comment).
+- `src/utils/helpers.test.ts`: Added 26 new tests covering all four new guard paths: `reply_to_email` body max-length (4 tests), `forward_email` fwdBody max-length (4 tests), `isRead` boolean type guard (9 tests), `isStarred` boolean type guard (9 tests).
+
+### Test Results
+
+**Before:** 737 tests passing
+**After:** 763 tests passing (+26)
+**Build:** Clean (0 TypeScript errors)
+
+---
+
 ## Cycle #33 — isHtml boolean type guard, body max-length cap
 **Timestamp:** 2026-03-18
 **Branch:** main
