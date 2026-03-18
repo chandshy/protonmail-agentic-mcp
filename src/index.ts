@@ -1669,6 +1669,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.isHtml !== undefined && typeof args.isHtml !== "boolean") {
           throw new McpError(ErrorCode.InvalidParams, "'isHtml' must be a boolean when provided.");
         }
+        // Guard 'replyAll' type — must be boolean when provided.  Without this
+        // check a non-boolean truthy value (e.g. the string "true" or the number 1)
+        // would pass `if (args.replyAll)` silently and trigger reply-all mode based
+        // on JS truthiness rather than caller intent — including all original CC
+        // recipients without any error to the caller.
+        if (args.replyAll !== undefined && typeof args.replyAll !== "boolean") {
+          throw new McpError(ErrorCode.InvalidParams, "'replyAll' must be a boolean when provided.");
+        }
         const original = await imapService.getEmailById(emailId);
         if (!original) {
           return { content: [{ type: "text" as const, text: "Original email not found" }], isError: true, structuredContent: { success: false, reason: "Original email not found" } };
@@ -1911,6 +1919,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (args.limit !== undefined && typeof args.limit !== "number") {
           throw new McpError(ErrorCode.InvalidParams, "'limit' must be a number.");
         }
+        // Guard free-text date filter fields: must be strings when provided.
+        // Without a typeof check a non-string truthy value (e.g. a Date object or
+        // number) would be cast as string via `as string` and forwarded to imapflow
+        // (Date objects produce "[object Date]"; numbers produce their string form),
+        // returning zero results without any error to the caller.
+        if (args.dateFrom !== undefined && typeof args.dateFrom !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'dateFrom' must be a string when provided.");
+        }
+        if (args.dateTo !== undefined && typeof args.dateTo !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'dateTo' must be a string when provided.");
+        }
         // Cross-validate date range: dateFrom must not be later than dateTo.
         // Both are optional; validate only when both are present and parseable.
         if (args.dateFrom && args.dateTo) {
@@ -1955,6 +1974,13 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_emails_by_label": {
+        // Type guard: 'label' must be a string.  A non-string value (number, object)
+        // would be silently cast via `as string` and passed to validateLabelName(),
+        // which would coerce it to "[object Object]" or "42", returning an opaque
+        // validation failure rather than a clear type-error message to the caller.
+        if (!args.label || typeof args.label !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'label' is required and must be a string.");
+        }
         const lblName = args.label as string;
         // Validate label before constructing the IMAP folder path — prevents
         // path traversal attacks such as Labels/../INBOX.
@@ -2417,6 +2443,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "move_to_label": {
         const mtlEmailId = requireNumericEmailId(args.emailId);
+        // Type guard: 'label' must be a string.  A non-string value (number, object)
+        // would be silently cast and forwarded to validateLabelName() as a coerced
+        // string, yielding an opaque failure rather than a clear type error.
+        if (!args.label || typeof args.label !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'label' is required and must be a string.");
+        }
         const label = args.label as string;
         // Validate label before constructing the IMAP folder path — prevents
         // path traversal attacks such as Labels/../INBOX.
@@ -2434,6 +2466,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const emailIds2: string[] = rawIds2
           .filter((id): id is string => typeof id === "string" && /^\d+$/.test(id))
           .slice(0, MAX_BULK_IDS);
+        // Type guard: 'label' must be a string.  Consistent with the guard added
+        // to move_to_label; a non-string value would be silently cast and produce
+        // an opaque failure from validateLabelName rather than a clear type error.
+        if (!args.label || typeof args.label !== "string") {
+          throw new McpError(ErrorCode.InvalidParams, "'label' is required and must be a string.");
+        }
         const rawLabel = args.label as string;
         // Validate label before constructing the IMAP folder path — prevents
         // path traversal attacks such as Labels/../INBOX.

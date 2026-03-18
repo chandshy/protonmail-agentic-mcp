@@ -3381,4 +3381,147 @@ describe('helpers', () => {
       expect(referencesGuardError([{ id: "<a@b.com>" }])).toBe("item 0 not string");
     });
   });
+
+  // ─── Cycle #36 guards ────────────────────────────────────────────────────────
+
+  describe("reply_to_email 'replyAll' boolean type guard (Cycle #36)", () => {
+    // Mirrors the handler guard:
+    //   if (args.replyAll !== undefined && typeof args.replyAll !== "boolean")
+    //     throw McpError(InvalidParams)
+    function replyAllGuardError(v: unknown): string | null {
+      if (v === undefined) return null;
+      if (typeof v !== "boolean") return "not a boolean";
+      return null;
+    }
+
+    it('undefined does not trigger guard', () => {
+      expect(replyAllGuardError(undefined)).toBeNull();
+    });
+
+    it('true does not trigger guard', () => {
+      expect(replyAllGuardError(true)).toBeNull();
+    });
+
+    it('false does not trigger guard', () => {
+      expect(replyAllGuardError(false)).toBeNull();
+    });
+
+    it('string "true" triggers guard', () => {
+      expect(replyAllGuardError("true")).toBe("not a boolean");
+    });
+
+    it('number 1 triggers guard', () => {
+      expect(replyAllGuardError(1)).toBe("not a boolean");
+    });
+
+    it('number 0 triggers guard', () => {
+      expect(replyAllGuardError(0)).toBe("not a boolean");
+    });
+
+    it('empty string triggers guard', () => {
+      expect(replyAllGuardError("")).toBe("not a boolean");
+    });
+
+    it('object triggers guard', () => {
+      expect(replyAllGuardError({})).toBe("not a boolean");
+    });
+
+    it('array triggers guard', () => {
+      expect(replyAllGuardError([true])).toBe("not a boolean");
+    });
+  });
+
+  describe("search_emails 'dateFrom'/'dateTo' string type guards (Cycle #36)", () => {
+    // Mirrors the handler guard:
+    //   if (args.dateFrom !== undefined && typeof args.dateFrom !== "string")
+    //     throw McpError(InvalidParams)
+    // (same pattern for dateTo)
+    function dateFilterGuardError(v: unknown): string | null {
+      if (v === undefined) return null;
+      if (typeof v !== "string") return "not a string";
+      return null;
+    }
+
+    it('undefined does not trigger guard for dateFrom', () => {
+      expect(dateFilterGuardError(undefined)).toBeNull();
+    });
+
+    it('valid ISO string does not trigger guard for dateFrom', () => {
+      expect(dateFilterGuardError("2024-01-01")).toBeNull();
+    });
+
+    it('valid ISO string does not trigger guard for dateTo', () => {
+      expect(dateFilterGuardError("2024-12-31")).toBeNull();
+    });
+
+    it('Date object triggers guard', () => {
+      expect(dateFilterGuardError(new Date("2024-01-01"))).toBe("not a string");
+    });
+
+    it('number triggers guard', () => {
+      expect(dateFilterGuardError(1704067200000)).toBe("not a string");
+    });
+
+    it('boolean triggers guard', () => {
+      expect(dateFilterGuardError(true)).toBe("not a string");
+    });
+
+    it('null triggers guard', () => {
+      expect(dateFilterGuardError(null)).toBe("not a string");
+    });
+
+    it('plain object triggers guard', () => {
+      expect(dateFilterGuardError({ year: 2024 })).toBe("not a string");
+    });
+
+    it('array triggers guard', () => {
+      expect(dateFilterGuardError(["2024-01-01"])).toBe("not a string");
+    });
+  });
+
+  describe("get_emails_by_label / move_to_label / bulk_move_to_label 'label' string type guard (Cycle #36)", () => {
+    // Mirrors the handler guard:
+    //   if (!args.label || typeof args.label !== "string")
+    //     throw McpError(InvalidParams, "'label' is required and must be a string.")
+    function labelGuardError(v: unknown): string | null {
+      if (!v || typeof v !== "string") return "invalid label";
+      return null;
+    }
+
+    it('valid string does not trigger guard', () => {
+      expect(labelGuardError("Work")).toBeNull();
+    });
+
+    it('non-empty string does not trigger guard', () => {
+      expect(labelGuardError("Personal-2024")).toBeNull();
+    });
+
+    it('undefined triggers guard', () => {
+      expect(labelGuardError(undefined)).toBe("invalid label");
+    });
+
+    it('null triggers guard', () => {
+      expect(labelGuardError(null)).toBe("invalid label");
+    });
+
+    it('empty string triggers guard', () => {
+      expect(labelGuardError("")).toBe("invalid label");
+    });
+
+    it('number triggers guard', () => {
+      expect(labelGuardError(42)).toBe("invalid label");
+    });
+
+    it('boolean triggers guard', () => {
+      expect(labelGuardError(true)).toBe("invalid label");
+    });
+
+    it('plain object triggers guard', () => {
+      expect(labelGuardError({ name: "Work" })).toBe("invalid label");
+    });
+
+    it('array triggers guard', () => {
+      expect(labelGuardError(["Work"])).toBe("invalid label");
+    });
+  });
 });
