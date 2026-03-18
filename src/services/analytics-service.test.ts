@@ -106,10 +106,48 @@ describe('AnalyticsService', () => {
       expect(Array.isArray(analytics.topRecipients)).toBe(true);
     });
 
-    it('should include response time stats', () => {
+    it('should return null responseTimeStats when no sent replies match received emails', () => {
+      // The mock data has no inReplyTo headers, so there are no measurable response times.
       const analytics = service.getEmailAnalytics();
-      expect(analytics.responseTimeStats).toBeDefined();
-      expect(analytics.responseTimeStats.average).toBeGreaterThanOrEqual(0);
+      expect(analytics.responseTimeStats).toBeNull();
+    });
+
+    it('should compute responseTimeStats when sent emails match received message-ids', () => {
+      const received: EmailMessage = {
+        id: '10',
+        from: 'alice@example.com',
+        to: ['me@example.com'],
+        subject: 'Hello',
+        body: 'Hi there',
+        isHtml: false,
+        date: new Date('2024-02-01T09:00:00Z'),
+        folder: 'INBOX',
+        isRead: true,
+        isStarred: false,
+        hasAttachment: false,
+        headers: { 'message-id': '<msg-abc@example.com>' },
+      };
+      const reply: EmailMessage = {
+        id: '11',
+        from: 'me@example.com',
+        to: ['alice@example.com'],
+        subject: 'Re: Hello',
+        body: 'Sure!',
+        isHtml: false,
+        date: new Date('2024-02-01T11:00:00Z'), // 2 hours later
+        folder: 'Sent',
+        isRead: true,
+        isStarred: false,
+        hasAttachment: false,
+        inReplyTo: '<msg-abc@example.com>',
+      };
+      const svc = new AnalyticsService();
+      svc.updateEmails([received], [reply]);
+      const analytics = svc.getEmailAnalytics();
+      expect(analytics.responseTimeStats).not.toBeNull();
+      expect(analytics.responseTimeStats!.sampleSize).toBe(1);
+      expect(analytics.responseTimeStats!.average).toBeCloseTo(2, 0); // ~2 hours
+      expect(analytics.responseTimeStats!.fastest).toBeCloseTo(2, 0);
     });
 
     it('should include attachment stats', () => {

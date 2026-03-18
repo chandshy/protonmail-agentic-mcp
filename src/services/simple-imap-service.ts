@@ -3,6 +3,7 @@
  */
 
 import { ImapFlow } from 'imapflow';
+import { readFileSync } from 'fs';
 import type { ParsedMail, Attachment } from 'mailparser';
 import { simpleParser } from 'mailparser';
 import { EmailMessage, EmailFolder, SearchEmailOptions } from '../types/index.js';
@@ -36,37 +37,110 @@ function truncateBody(body: string, maxLength: number = 300): string {
   return truncated + '...';
 }
 
+/** Maximum number of emails held in the in-process cache.
+ *  Each cached email carries its full body + binary attachment content, so
+ *  an unbounded map is a memory-exhaustion vector.  Oldest entries are evicted
+ *  (FIFO) once the cap is reached — imapflow UIDs are monotonically increasing
+ *  so the oldest key is reliably the first key in insertion order. */
+const MAX_EMAIL_CACHE_SIZE = 500;
+
 export class SimpleIMAPService {
   private client: ImapFlow | null = null;
   private isConnected: boolean = false;
   private emailCache: Map<string, EmailMessage> = new Map();
   private folderCache: Map<string, EmailFolder> = new Map();
-  private connectionConfig: { host: string; port: number; username?: string; password?: string } | null = null;
+  private connectionConfig: { host: string; port: number; username?: string; password?: string; bridgeCertPath?: string } | null = null;
 
-  async connect(host: string = 'localhost', port: number = 1143, username?: string, password?: string): Promise<void> {
+  /**
+   * Write an entry to emailCache, evicting the oldest entry (FIFO) when the
+   * cap is reached.  Map iteration order in V8 is insertion order, so
+   * `keys().next()` reliably gives the oldest key.
+   */
+  private setCacheEntry(id: string, email: EmailMessage): void {
+    if (!this.emailCache.has(id) && this.emailCache.size >= MAX_EMAIL_CACHE_SIZE) {
+      const oldest = this.emailCache.keys().next().value;
+      if (oldest !== undefined) this.emailCache.delete(oldest);
+    }
+    this.emailCache.set(id, email);
+  }
+
+  /** Validate that an email ID is a numeric UID string (prevents IMAP injection) */
+  private validateEmailId(id: string): void {
+    if (!/^\d+$/.test(id)) {
+      throw new Error(`Invalid email ID format: ${JSON.stringify(id)}`);
+    }
+  }
+
+  /** Validate a folder name — reject empty, whitespace-only, overly long, or
+   *  names with control characters.
+   *
+   *  IMAP folder names are encoded as UTF-7 modified strings in IMAP commands.
+   *  There is no RFC-mandated maximum, but imapflow serialises the name into an
+   *  IMAP command literal; an unbounded name causes excessive command-buffer
+   *  allocation in the client and bloats log output.  A 1 000-character limit
+   *  is well above any real-world folder name and caps the DoS surface.
+   */
+  private validateFolderName(name: string): void {
+    if (!name || name.trim().length === 0) {
+      throw new Error('Folder name must not be empty');
+    }
+    // RFC 5321 / practical sanity: no folder name should exceed 1 000 chars.
+    if (name.length > 1_000) {
+      throw new Error(`Folder name is too long: ${name.length} characters (max 1000)`);
+    }
+    if (/[\x00-\x1f]/.test(name)) {
+      throw new Error(`Folder name contains invalid control characters: ${JSON.stringify(name.slice(0, 80))}`);
+    }
+  }
+
+  async connect(host: string = 'localhost', port: number = 1143, username?: string, password?: string, bridgeCertPath?: string): Promise<void> {
     logger.debug('Connecting to IMAP server', 'IMAPService', { host, port });
 
     try {
       // Store connection config for reconnection
-      this.connectionConfig = { host, port, username, password };
+      this.connectionConfig = { host, port, username, password, bridgeCertPath };
 
       // Check if using localhost (Proton Bridge)
       const isLocalhost = host === 'localhost' || host === '127.0.0.1';
 
+      // Build TLS options
+      let tlsOptions: Record<string, unknown> | undefined;
+      if (isLocalhost) {
+        if (bridgeCertPath) {
+          try {
+            const bridgeCert = readFileSync(bridgeCertPath);
+            tlsOptions = { ca: [bridgeCert], minVersion: 'TLSv1.2' };
+            logger.info('IMAP: Using exported Bridge certificate for TLS trust', 'IMAPService');
+          } catch (err) {
+            logger.warn(
+              'IMAP: Failed to load Bridge cert — falling back to rejectUnauthorized:false (set PROTONMAIL_BRIDGE_CERT to fix)',
+              'IMAPService',
+              err
+            );
+            tlsOptions = { rejectUnauthorized: false, minVersion: 'TLSv1.2' };
+          }
+        } else {
+          logger.warn(
+            'IMAP: No PROTONMAIL_BRIDGE_CERT configured — using rejectUnauthorized:false for localhost. Export the cert from Bridge settings and set the env var.',
+            'IMAPService'
+          );
+          tlsOptions = { rejectUnauthorized: false, minVersion: 'TLSv1.2' };
+        }
+      } else {
+        // Non-localhost: full certificate validation required
+        tlsOptions = { minVersion: 'TLSv1.2' };
+      }
+
       this.client = new ImapFlow({
         host,
         port,
-        secure: false, // Don't use SSL/TLS wrapper
+        secure: !isLocalhost, // Use implicit TLS for non-Bridge connections; Bridge uses STARTTLS
         auth: username && password ? {
           user: username,
           pass: password
         } : undefined,
         logger: false,
-        // For Proton Bridge on localhost, accept self-signed certificates
-        tls: isLocalhost ? {
-          rejectUnauthorized: false,
-          minVersion: 'TLSv1.2'
-        } : undefined
+        tls: tlsOptions
       });
 
       // Setup connection event handlers (only if client has event emitter methods)
@@ -113,8 +187,8 @@ export class SimpleIMAPService {
 
     logger.info('Attempting to reconnect to IMAP server', 'IMAPService');
 
-    const { host, port, username, password } = this.connectionConfig;
-    await this.connect(host, port, username, password);
+    const { host, port, username, password, bridgeCertPath } = this.connectionConfig;
+    await this.connect(host, port, username, password, bridgeCertPath);
   }
 
   /**
@@ -174,6 +248,9 @@ export class SimpleIMAPService {
   }
 
   async getEmails(folder: string = 'INBOX', limit: number = 50, offset: number = 0): Promise<EmailMessage[]> {
+    this.validateFolderName(folder);
+    limit = Math.min(Math.max(1, limit ?? 50), 200);
+    offset = Math.max(0, offset ?? 0);
     logger.debug('Fetching emails', 'IMAPService', { folder, limit, offset });
 
     try {
@@ -240,7 +317,7 @@ export class SimpleIMAPService {
               }))
             };
 
-            this.emailCache.set(cachedEmail.id, cachedEmail);
+            this.setCacheEntry(cachedEmail.id, cachedEmail);
 
             // Return truncated body for list view, without attachment content
             const listEmail: EmailMessage = {
@@ -274,6 +351,7 @@ export class SimpleIMAPService {
   }
 
   async getEmailById(emailId: string): Promise<EmailMessage | null> {
+    this.validateEmailId(emailId);
     logger.debug('Fetching email by ID', 'IMAPService', { emailId });
 
     // Check cache first
@@ -328,8 +406,20 @@ export class SimpleIMAPService {
               }))
             };
 
-            this.emailCache.set(emailMessage.id, emailMessage);
-            return emailMessage;
+            // Cache the full version (including binary content) for internal use
+            this.setCacheEntry(emailMessage.id, emailMessage);
+
+            // Return without binary attachment content to caller
+            return {
+              ...emailMessage,
+              attachments: emailMessage.attachments?.map(att => ({
+                filename: att.filename,
+                contentType: att.contentType,
+                size: att.size,
+                contentId: att.contentId
+                // content intentionally omitted from returned value
+              }))
+            };
           }
         } finally {
           lock.release();
@@ -359,7 +449,8 @@ export class SimpleIMAPService {
     }
 
     const folder = options.folder || 'INBOX';
-    const limit = options.limit || 100;
+    this.validateFolderName(folder);
+    const limit = Math.min(Math.max(1, options.limit || 100), 200);
 
     try {
       const lock = await this.client.getMailboxLock(folder);
@@ -411,8 +502,13 @@ export class SimpleIMAPService {
           }
         }
 
-        logger.info(`Search found ${results.length} emails`, 'IMAPService');
-        return results;
+        // Post-filter by hasAttachment if requested (IMAP SEARCH has no native attachment filter)
+        const filtered = options.hasAttachment !== undefined
+          ? results.filter(e => e.hasAttachment === options.hasAttachment)
+          : results;
+
+        logger.info(`Search found ${filtered.length} emails`, 'IMAPService');
+        return filtered;
       } finally {
         lock.release();
       }
@@ -423,6 +519,7 @@ export class SimpleIMAPService {
   }
 
   async markEmailRead(emailId: string, isRead: boolean = true): Promise<boolean> {
+    this.validateEmailId(emailId);
     logger.debug('Marking email read status', 'IMAPService', { emailId, isRead });
 
     if (!this.client || !this.isConnected) {
@@ -463,6 +560,7 @@ export class SimpleIMAPService {
   }
 
   async starEmail(emailId: string, isStarred: boolean = true): Promise<boolean> {
+    this.validateEmailId(emailId);
     logger.debug('Starring email', 'IMAPService', { emailId, isStarred });
 
     if (!this.client || !this.isConnected) {
@@ -503,6 +601,8 @@ export class SimpleIMAPService {
   }
 
   async moveEmail(emailId: string, targetFolder: string): Promise<boolean> {
+    this.validateEmailId(emailId);
+    this.validateFolderName(targetFolder);
     logger.debug('Moving email', 'IMAPService', { emailId, targetFolder });
 
     if (!this.client || !this.isConnected) {
@@ -539,6 +639,7 @@ export class SimpleIMAPService {
   }
 
   async bulkMoveEmails(emailIds: string[], targetFolder: string): Promise<{ success: number; failed: number; errors: string[] }> {
+    this.validateFolderName(targetFolder);
     logger.debug('Bulk moving emails', 'IMAPService', { count: emailIds.length, targetFolder });
 
     if (!this.client || !this.isConnected) {
@@ -608,6 +709,7 @@ export class SimpleIMAPService {
   }
 
   async deleteEmail(emailId: string): Promise<boolean> {
+    this.validateEmailId(emailId);
     logger.debug('Deleting email', 'IMAPService', { emailId });
 
     if (!this.client || !this.isConnected) {
@@ -710,6 +812,7 @@ export class SimpleIMAPService {
    * Create a new folder
    */
   async createFolder(folderName: string): Promise<boolean> {
+    this.validateFolderName(folderName);
     if (!this.isConnected || !this.client) {
       throw new Error('IMAP client not connected');
     }
@@ -739,6 +842,7 @@ export class SimpleIMAPService {
    * Delete a folder (must be empty)
    */
   async deleteFolder(folderName: string): Promise<boolean> {
+    this.validateFolderName(folderName);
     if (!this.isConnected || !this.client) {
       throw new Error('IMAP client not connected');
     }
@@ -775,6 +879,8 @@ export class SimpleIMAPService {
    * Rename a folder
    */
   async renameFolder(oldName: string, newName: string): Promise<boolean> {
+    this.validateFolderName(oldName);
+    this.validateFolderName(newName);
     if (!this.isConnected || !this.client) {
       throw new Error('IMAP client not connected');
     }

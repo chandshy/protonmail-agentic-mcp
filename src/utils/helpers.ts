@@ -2,10 +2,33 @@
  * Helper utilities for ProtonMail MCP Server
  */
 
+import { randomUUID } from "crypto";
+
 /**
- * Validate email address format
+ * Validate email address format.
+ *
+ * Enforces RFC 5321 length limits in addition to structural checks:
+ *   • Total address: max 320 characters
+ *   • Local part (before @): max 64 characters
+ *   • Domain (after @): max 253 characters
+ *
+ * An unbounded regex check alone allowed multi-kilobyte "addresses" to pass,
+ * risking header bloat and downstream OOM in MIME parsers.
  */
 export function isValidEmail(email: string): boolean {
+  // Reject control characters before anything else (prevents null-byte bypass).
+  if (/[\x00-\x1f\x7f]/.test(email)) return false;
+
+  // RFC 5321 § 4.5.3.1 length limits.
+  if (email.length > 320) return false;
+  const atIdx = email.indexOf("@");
+  if (atIdx < 1) return false;                   // no local part
+  const localPart = email.slice(0, atIdx);
+  const domain    = email.slice(atIdx + 1);
+  if (localPart.length > 64)  return false;
+  if (domain.length > 253)    return false;
+  if (domain.length === 0)    return false;
+
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
@@ -59,12 +82,19 @@ export function bytesToMB(bytes: number): number {
 }
 
 /**
- * Sanitize string for safe logging
+ * Sanitize string for safe logging.
+ *
+ * Strips the full C0/C1 control-character set (U+0000–U+001F and U+007F)
+ * before truncating.  Only stripping [\r\n\t] left 24 other control characters
+ * (backspace, form-feed, vertical-tab, ESC, etc.) available for log injection
+ * or terminal-escape attacks.
  */
 export function sanitizeForLog(str: string, maxLength: number = 100): string {
   if (!str) return "";
 
-  let sanitized = str.replace(/[\r\n\t]/g, " ").trim();
+  // Replace every C0/C1 control character with a space (consistent with the
+  // CONTROL_CHARS_RE used in security.ts sanitizeText).
+  let sanitized = str.replace(/[\x00-\x1f\x7f]/g, " ").trim();
 
   if (sanitized.length > maxLength) {
     sanitized = sanitized.substring(0, maxLength) + "...";
@@ -121,10 +151,10 @@ export async function retry<T>(
 }
 
 /**
- * Generate unique ID
+ * Generate unique ID using cryptographically secure randomness
  */
 export function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+  return randomUUID();
 }
 
 /**

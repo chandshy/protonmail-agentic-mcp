@@ -4,10 +4,36 @@
 
 import { LogEntry } from "../types/index.js";
 
+/** Keys whose values must be redacted before being stored in log entries */
+const SENSITIVE_KEYS = /^(password|body|content|attachments|smtpToken|bridgeCertPath)$/i;
+
 export class Logger {
   private debugMode: boolean = false;
   private logs: LogEntry[] = [];
   private maxLogs: number = 1000;
+
+  /**
+   * Recursively sanitize data before storing in logs.
+   * Redacts sensitive keys and truncates long strings.
+   */
+  private sanitizeData(data: unknown): unknown {
+    if (data === null || data === undefined) return data;
+    if (typeof data === "string") {
+      const truncated = data.length > 200 ? data.substring(0, 200) + "…" : data;
+      return truncated.replace(/[\r\n\t]/g, " ");
+    }
+    if (Array.isArray(data)) {
+      return data.map((item) => this.sanitizeData(item));
+    }
+    if (typeof data === "object") {
+      const result: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+        result[key] = SENSITIVE_KEYS.test(key) ? "[redacted]" : this.sanitizeData(value);
+      }
+      return result;
+    }
+    return data;
+  }
 
   setDebugMode(enabled: boolean): void {
     this.debugMode = enabled;
@@ -46,7 +72,7 @@ export class Logger {
       level,
       context,
       message,
-      data,
+      data: this.sanitizeData(data),
     };
 
     this.logs.push(entry);
@@ -61,13 +87,14 @@ export class Logger {
     level?: "debug" | "info" | "warn" | "error",
     limit: number = 100
   ): LogEntry[] {
+    const safeLimit = Math.min(Math.max(1, limit), 500);
     let filteredLogs = this.logs;
 
     if (level) {
       filteredLogs = filteredLogs.filter((log) => log.level === level);
     }
 
-    return filteredLogs.slice(-limit);
+    return filteredLogs.slice(-safeLimit);
   }
 
   clearLogs(): void {

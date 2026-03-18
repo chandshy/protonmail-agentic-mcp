@@ -3,9 +3,35 @@
  */
 
 import nodemailer from "nodemailer";
+import { readFileSync } from "fs";
 import { ProtonMailConfig, SendEmailOptions } from "../types/index.js";
 import { logger } from "../utils/logger.js";
 import { parseEmails, isValidEmail } from "../utils/helpers.js";
+
+/**
+ * Strip CRLF and null bytes from a header-like string value to prevent
+ * header injection.  Used for Message-ID style fields (inReplyTo, references).
+ */
+function stripHeaderInjection(s: string): string {
+  return s.replace(/[\r\n\x00]/g, "");
+}
+
+/** Escape special HTML characters to prevent injection in email bodies */
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Header keys that must never be overridden via caller-supplied headers */
+const BLOCKED_HEADER_KEYS = /^(to|cc|bcc|from|return-path|reply-to|sender)$/i;
+
+/** Attachment limits — prevents OOM / DoS via oversized email payloads. */
+const MAX_ATTACHMENTS       = 20;
+const MAX_ATTACHMENT_BYTES  = 25 * 1024 * 1024; // 25 MB per file (matches Proton limit)
+const MAX_TOTAL_ATT_BYTES   = 25 * 1024 * 1024; // 25 MB total across all attachments
 
 export class SMTPService {
   private transporter: nodemailer.Transporter | null = null;
@@ -24,20 +50,51 @@ export class SMTPService {
       this.config.smtp.host === "localhost" ||
       this.config.smtp.host === "127.0.0.1";
 
+    // Prefer SMTP token over password for direct (non-Bridge) connections
+    const authPassword = !isLocalhost && this.config.smtp.smtpToken
+      ? this.config.smtp.smtpToken
+      : this.config.smtp.password;
+
+    // Build TLS options based on connection type
+    let tlsOptions: Record<string, unknown>;
+    if (isLocalhost) {
+      const certPath = this.config.smtp.bridgeCertPath;
+      if (certPath) {
+        // Load the exported Bridge certificate — proper trust without disabling validation
+        try {
+          const bridgeCert = readFileSync(certPath);
+          tlsOptions = { ca: [bridgeCert], minVersion: "TLSv1.2" };
+          logger.info("SMTP: Using exported Bridge certificate for TLS trust", "SMTPService");
+        } catch (err) {
+          logger.warn(
+            "SMTP: Failed to load Bridge cert — falling back to rejectUnauthorized:false (set PROTONMAIL_BRIDGE_CERT to fix)",
+            "SMTPService",
+            err
+          );
+          tlsOptions = { rejectUnauthorized: false, minVersion: "TLSv1.2" };
+        }
+      } else {
+        logger.warn(
+          "SMTP: No PROTONMAIL_BRIDGE_CERT configured — using rejectUnauthorized:false for localhost. Export the cert from Bridge settings and set the env var.",
+          "SMTPService"
+        );
+        tlsOptions = { rejectUnauthorized: false, minVersion: "TLSv1.2" };
+      }
+    } else {
+      // Non-localhost: full certificate validation required
+      tlsOptions = { minVersion: "TLSv1.2" };
+    }
+
     this.transporter = nodemailer.createTransport({
       host: this.config.smtp.host,
       port: this.config.smtp.port,
       secure: this.config.smtp.secure,
       auth: {
         user: this.config.smtp.username,
-        pass: this.config.smtp.password,
+        pass: authPassword,
       },
-      // For Proton Bridge on localhost, use STARTTLS but don't verify certs
       requireTLS: isLocalhost,
-      tls: {
-        rejectUnauthorized: false,
-        minVersion: "TLSv1.2",
-      },
+      tls: tlsOptions,
     });
 
     logger.info("SMTP transporter initialized", "SMTPService");
@@ -92,8 +149,17 @@ export class SMTPService {
       throw new Error("At least one recipient is required");
     }
 
-    // Validate all email addresses
+    // Cap total recipient count to prevent spam amplification / DoS.
+    // Proton Bridge itself enforces SMTP limits; this is defence-in-depth.
+    const MAX_RECIPIENTS = 50;
     const allAddresses = [...toAddresses, ...ccAddresses, ...bccAddresses];
+    if (allAddresses.length > MAX_RECIPIENTS) {
+      throw new Error(
+        `Too many recipients: ${allAddresses.length} supplied, max ${MAX_RECIPIENTS} allowed (To + CC + BCC combined).`
+      );
+    }
+
+    // Validate all email addresses
     for (const email of allAddresses) {
       if (!isValidEmail(email)) {
         throw new Error(`Invalid email address: ${email}`);
@@ -104,7 +170,10 @@ export class SMTPService {
       const mailOptions: nodemailer.SendMailOptions = {
         from: this.config.smtp.username,
         to: toAddresses.join(", "),
-        subject: options.subject,
+        // Strip CRLF/NUL to prevent header injection via a crafted subject line.
+        // reply_to_email already strips these from fetched subjects; this covers
+        // the direct send_email path where the agent supplies the subject directly.
+        subject: stripHeaderInjection(options.subject),
         text: options.isHtml ? undefined : options.body,
         html: options.isHtml ? options.body : undefined,
       };
@@ -118,6 +187,9 @@ export class SMTPService {
       }
 
       if (options.replyTo) {
+        if (!isValidEmail(options.replyTo)) {
+          throw new Error(`Invalid replyTo email address: ${options.replyTo}`);
+        }
         mailOptions.replyTo = options.replyTo;
       }
 
@@ -126,24 +198,99 @@ export class SMTPService {
       }
 
       if (options.inReplyTo) {
-        mailOptions.inReplyTo = options.inReplyTo;
+        // Strip CRLF/NUL to prevent header injection via a crafted Message-ID
+        mailOptions.inReplyTo = stripHeaderInjection(options.inReplyTo);
       }
 
       if (options.references && options.references.length > 0) {
-        mailOptions.references = options.references.join(" ");
+        // Strip CRLF/NUL from each reference before joining
+        mailOptions.references = options.references.map(stripHeaderInjection).join(" ");
       }
 
       if (options.headers) {
-        mailOptions.headers = options.headers;
+        // Only allow safe custom headers — block routing/envelope headers to prevent injection.
+        // Both the key and the value must be stripped of CRLF/NUL before the
+        // block-list check: a key like "X-Foo\r\nBcc: evil@x.com" would otherwise
+        // bypass the regex and inject a raw SMTP header line.
+        const safeHeaders: Record<string, string> = {};
+        for (const [rawKey, rawValue] of Object.entries(options.headers)) {
+          // Strip CRLF and NUL from the key before testing against the blocklist.
+          const key = stripHeaderInjection(rawKey).trim();
+          if (!key) continue; // drop empty/whitespace-only keys
+          if (BLOCKED_HEADER_KEYS.test(key)) {
+            logger.warn(`SMTP: Blocked disallowed header '${key}'`, "SMTPService");
+            continue;
+          }
+          // Strip CRLF and NUL from the value to prevent header injection via
+          // a crafted value such as "harmless\r\nBcc: victim@evil.com".
+          safeHeaders[key] = stripHeaderInjection(String(rawValue ?? ""));
+        }
+        if (Object.keys(safeHeaders).length > 0) {
+          mailOptions.headers = safeHeaders;
+        }
       }
 
       if (options.attachments && options.attachments.length > 0) {
-        mailOptions.attachments = options.attachments.map((att) => ({
-          filename: att.filename,
-          content: att.content,
-          contentType: att.contentType,
-          cid: att.contentId,
-        }));
+        // Enforce count cap
+        if (options.attachments.length > MAX_ATTACHMENTS) {
+          throw new Error(
+            `Too many attachments: ${options.attachments.length} supplied, max ${MAX_ATTACHMENTS} allowed.`
+          );
+        }
+
+        // Enforce per-file and total size caps.
+        // att.content may be a base64 string, Buffer, or Readable — only string/Buffer are
+        // trivially sizable; Readable streams are rejected to prevent unbounded streaming.
+        let totalBytes = 0;
+        for (const att of options.attachments) {
+          const content = att.content;
+          let bytes: number;
+          if (Buffer.isBuffer(content)) {
+            bytes = content.length;
+          } else if (typeof content === "string") {
+            // base64 string: actual binary size ≈ str.length * 0.75
+            bytes = Math.ceil(content.length * 0.75);
+          } else {
+            throw new Error(
+              `Attachment '${att.filename ?? "unnamed"}': content must be a Buffer or base64 string, not a stream.`
+            );
+          }
+          if (bytes > MAX_ATTACHMENT_BYTES) {
+            throw new Error(
+              `Attachment '${att.filename ?? "unnamed"}' is too large: ` +
+              `${Math.round(bytes / 1024 / 1024)}MB exceeds the ${MAX_ATTACHMENT_BYTES / 1024 / 1024}MB per-file limit.`
+            );
+          }
+          totalBytes += bytes;
+          if (totalBytes > MAX_TOTAL_ATT_BYTES) {
+            throw new Error(
+              `Total attachment size exceeds the ${MAX_TOTAL_ATT_BYTES / 1024 / 1024}MB limit.`
+            );
+          }
+        }
+
+        mailOptions.attachments = options.attachments.map((att) => {
+          // Strip CRLF and NUL from filename — a value like
+          // "report.pdf\r\nContent-Type: text/html" would break the
+          // Content-Disposition MIME header and inject a bogus part header.
+          const safeFilename = att.filename
+            ? stripHeaderInjection(att.filename).slice(0, 255) || "attachment"
+            : undefined;
+
+          // Strip CRLF from contentType to prevent MIME header injection.
+          // Also reject the value if it doesn't look like a valid MIME type
+          // (type/subtype) to avoid smuggling arbitrary header content.
+          const rawCt = att.contentType ? stripHeaderInjection(att.contentType).trim() : undefined;
+          const safeContentType =
+            rawCt && /^[\w!#$&\-^]+\/[\w!#$&\-^+.]+$/.test(rawCt) ? rawCt : undefined;
+
+          return {
+            filename:    safeFilename,
+            content:     att.content,
+            contentType: safeContentType,
+            cid:         att.contentId,
+          };
+        });
       }
 
       const info = await this.transporter.sendMail(mailOptions);
@@ -178,7 +325,7 @@ export class SMTPService {
       <h2>🌟 Test Email Successful!</h2>
       <p>This is a test email from the ProtonMail MCP Server.</p>
       <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
-      <p><strong>From:</strong> ${this.config.smtp.username}</p>
+      <p><strong>From:</strong> ${escapeHtml(this.config.smtp.username)}</p>
       <p>If you received this email, your SMTP configuration is working correctly! 🎉</p>
       <hr>
     `;

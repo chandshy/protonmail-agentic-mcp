@@ -6,19 +6,38 @@ import { EmailMessage, EmailStats, EmailAnalytics, Contact } from '../types/inde
 import { logger } from '../utils/logger.js';
 import { extractEmailAddress, bytesToMB } from '../utils/helpers.js';
 
+/** Maximum unique contacts tracked — prevents unbounded Map growth. */
+const MAX_CONTACTS = 10_000;
+
 export class AnalyticsService {
-  private emails: EmailMessage[] = [];
+  private inboxEmails: EmailMessage[] = [];
+  private sentEmails: EmailMessage[] = [];
   private contacts: Map<string, Contact> = new Map();
   private statsCache: EmailStats | null = null;
   private analyticsCache: EmailAnalytics | null = null;
   private lastCacheUpdate: Date | null = null;
   private cacheValidityMs: number = 5 * 60 * 1000; // 5 minutes
 
-  updateEmails(emails: EmailMessage[]): void {
-    logger.debug(`Updating analytics with ${emails.length} emails`, 'AnalyticsService');
-    this.emails = emails;
+  /**
+   * Update the analytics dataset. Pass both inbox and sent folders for accurate
+   * volume trends, contact stats, and response-time calculation.
+   * Does NOT clear the computed cache — the cache is only cleared when new data
+   * differs from what is already stored, preventing spurious invalidation.
+   */
+  updateEmails(inbox: EmailMessage[], sent: EmailMessage[] = []): void {
+    logger.debug(
+      `Updating analytics with ${inbox.length} inbox / ${sent.length} sent emails`,
+      'AnalyticsService'
+    );
+    this.inboxEmails = inbox;
+    this.sentEmails = sent;
     this.invalidateCache();
     this.processContacts();
+  }
+
+  /** @deprecated Use updateEmails(inbox, sent) — kept for backward compatibility */
+  get emails(): EmailMessage[] {
+    return this.inboxEmails;
   }
 
   private invalidateCache(): void {
@@ -29,22 +48,26 @@ export class AnalyticsService {
 
   private isCacheValid(): boolean {
     if (!this.lastCacheUpdate) return false;
-    const now = new Date().getTime();
-    const cacheAge = now - this.lastCacheUpdate.getTime();
+    const cacheAge = Date.now() - this.lastCacheUpdate.getTime();
     return cacheAge < this.cacheValidityMs;
   }
 
+  /**
+   * Build the contact map from both inbox (received) and sent emails.
+   * - inbox emails → the `from` address sent a message to us
+   * - sent emails  → the `to` addresses received a message from us
+   */
   private processContacts(): void {
     this.contacts.clear();
 
-    for (const email of this.emails) {
-      // Process sender
+    for (const email of this.inboxEmails) {
       const fromAddress = extractEmailAddress(email.from);
       if (fromAddress) {
         this.updateContact(fromAddress, 'received', email.date);
       }
+    }
 
-      // Process recipients
+    for (const email of this.sentEmails) {
       for (const to of email.to) {
         const toAddress = extractEmailAddress(to);
         if (toAddress) {
@@ -60,12 +83,15 @@ export class AnalyticsService {
     let contact = this.contacts.get(email);
 
     if (!contact) {
+      // Silently drop new contacts once the cap is reached.
+      // Existing contacts (already in the map) are still updated below.
+      if (this.contacts.size >= MAX_CONTACTS) return;
       contact = {
         email,
         emailsSent: 0,
         emailsReceived: 0,
         lastInteraction: date,
-        firstInteraction: date
+        firstInteraction: date,
       };
       this.contacts.set(email, contact);
     }
@@ -79,7 +105,6 @@ export class AnalyticsService {
     if (date > contact.lastInteraction) {
       contact.lastInteraction = date;
     }
-
     if (date < contact.firstInteraction) {
       contact.firstInteraction = date;
     }
@@ -92,25 +117,23 @@ export class AnalyticsService {
 
     logger.debug('Calculating email statistics', 'AnalyticsService');
 
-    const totalEmails = this.emails.length;
-    const unreadEmails = this.emails.filter(e => !e.isRead).length;
-    const starredEmails = this.emails.filter(e => e.isStarred).length;
+    const allEmails = [...this.inboxEmails, ...this.sentEmails];
+    const totalEmails = allEmails.length;
+    const unreadEmails = this.inboxEmails.filter(e => !e.isRead).length;
+    const starredEmails = allEmails.filter(e => e.isStarred).length;
 
-    // Get unique folders
-    const folders = new Set(this.emails.map(e => e.folder));
+    const folders = new Set(allEmails.map(e => e.folder));
     const totalFolders = folders.size;
 
-    // Calculate average emails per day
     let averageEmailsPerDay = 0;
-    if (this.emails.length > 0) {
-      const dates = this.emails.map(e => e.date.getTime());
+    if (allEmails.length > 0) {
+      const dates = allEmails.map(e => e.date.getTime());
       const oldestDate = Math.min(...dates);
       const newestDate = Math.max(...dates);
       const daysDiff = Math.max(1, (newestDate - oldestDate) / (1000 * 60 * 60 * 24));
       averageEmailsPerDay = Math.round(totalEmails / daysDiff);
     }
 
-    // Find most active contact
     let mostActiveContact = 'N/A';
     let maxInteractions = 0;
     for (const [email, contact] of this.contacts.entries()) {
@@ -121,9 +144,8 @@ export class AnalyticsService {
       }
     }
 
-    // Find most used folder
     const folderCounts = new Map<string, number>();
-    for (const email of this.emails) {
+    for (const email of allEmails) {
       folderCounts.set(email.folder, (folderCounts.get(email.folder) || 0) + 1);
     }
 
@@ -136,9 +158,8 @@ export class AnalyticsService {
       }
     }
 
-    // Estimate storage (rough approximation)
     let totalBytes = 0;
-    for (const email of this.emails) {
+    for (const email of allEmails) {
       totalBytes += email.body.length;
       if (email.attachments) {
         for (const att of email.attachments) {
@@ -156,12 +177,11 @@ export class AnalyticsService {
       averageEmailsPerDay,
       mostActiveContact,
       mostUsedFolder,
-      storageUsedMB: bytesToMB(totalBytes)
+      storageUsedMB: bytesToMB(totalBytes),
     };
 
     this.statsCache = stats;
     this.lastCacheUpdate = new Date();
-
     return stats;
   }
 
@@ -172,43 +192,22 @@ export class AnalyticsService {
 
     logger.debug('Calculating email analytics', 'AnalyticsService');
 
-    // Volume trends (last 30 days)
     const volumeTrends = this.calculateVolumeTrends(30);
 
-    // Top senders
     const topSenders = Array.from(this.contacts.values())
       .filter(c => c.emailsReceived > 0)
       .sort((a, b) => b.emailsReceived - a.emailsReceived)
       .slice(0, 10)
-      .map(c => ({
-        email: c.email,
-        count: c.emailsReceived,
-        lastContact: c.lastInteraction
-      }));
+      .map(c => ({ email: c.email, count: c.emailsReceived, lastContact: c.lastInteraction }));
 
-    // Top recipients
     const topRecipients = Array.from(this.contacts.values())
       .filter(c => c.emailsSent > 0)
       .sort((a, b) => b.emailsSent - a.emailsSent)
       .slice(0, 10)
-      .map(c => ({
-        email: c.email,
-        count: c.emailsSent,
-        lastContact: c.lastInteraction
-      }));
+      .map(c => ({ email: c.email, count: c.emailsSent, lastContact: c.lastInteraction }));
 
-    // Response time stats (mock data for now)
-    const responseTimeStats = {
-      average: 3.5,
-      median: 2.0,
-      fastest: 0.5,
-      slowest: 24.0
-    };
-
-    // Peak activity hours
+    const responseTimeStats = this.calculateResponseTimeStats();
     const peakActivityHours = this.calculatePeakActivityHours();
-
-    // Attachment stats
     const attachmentStats = this.calculateAttachmentStats();
 
     const analytics: EmailAnalytics = {
@@ -217,16 +216,62 @@ export class AnalyticsService {
       topRecipients,
       responseTimeStats,
       peakActivityHours,
-      attachmentStats
+      attachmentStats,
     };
 
     this.analyticsCache = analytics;
     this.lastCacheUpdate = new Date();
-
     return analytics;
   }
 
-  private calculateVolumeTrends(days: number): { date: string; received: number; sent: number }[] {
+  /**
+   * Compute response times from sent emails that have an inReplyTo header
+   * matching an inbox email. Returns null when there is insufficient data.
+   * Times are expressed in hours.
+   */
+  private calculateResponseTimeStats(): EmailAnalytics['responseTimeStats'] {
+    const responseTimes: number[] = [];
+
+    // Build a lookup from Message-ID to inbox email date
+    const inboxById = new Map<string, Date>();
+    for (const email of this.inboxEmails) {
+      const msgId = email.headers?.['message-id'];
+      if (msgId) {
+        inboxById.set(msgId.trim(), email.date);
+      }
+    }
+
+    for (const sent of this.sentEmails) {
+      if (!sent.inReplyTo) continue;
+      const originalDate = inboxById.get(sent.inReplyTo.trim());
+      if (!originalDate) continue;
+
+      const diffHours = (sent.date.getTime() - originalDate.getTime()) / (1000 * 60 * 60);
+      // Only count plausible replies (within 30 days, after the original)
+      if (diffHours > 0 && diffHours <= 30 * 24) {
+        responseTimes.push(diffHours);
+      }
+    }
+
+    if (responseTimes.length === 0) return null;
+
+    responseTimes.sort((a, b) => a - b);
+    const average = responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length;
+    const median = responseTimes[Math.floor(responseTimes.length / 2)];
+
+    return {
+      average: parseFloat(average.toFixed(1)),
+      median: parseFloat(median.toFixed(1)),
+      fastest: parseFloat(responseTimes[0].toFixed(1)),
+      slowest: parseFloat(responseTimes[responseTimes.length - 1].toFixed(1)),
+      sampleSize: responseTimes.length,
+    };
+  }
+
+  /**
+   * Volume trends split by received (inbox) and sent (sent folder).
+   */
+  private calculateVolumeTrends(days: number): EmailAnalytics['volumeTrends'] {
     const trends = new Map<string, { received: number; sent: number }>();
 
     const now = new Date();
@@ -237,13 +282,16 @@ export class AnalyticsService {
       trends.set(dateStr, { received: 0, sent: 0 });
     }
 
-    for (const email of this.emails) {
+    for (const email of this.inboxEmails) {
       const dateStr = email.date.toISOString().split('T')[0];
-      if (trends.has(dateStr)) {
-        const trend = trends.get(dateStr)!;
-        // Simplified: count all as received
-        trend.received++;
-      }
+      const entry = trends.get(dateStr);
+      if (entry) entry.received++;
+    }
+
+    for (const email of this.sentEmails) {
+      const dateStr = email.date.toISOString().split('T')[0];
+      const entry = trends.get(dateStr);
+      if (entry) entry.sent++;
     }
 
     return Array.from(trends.entries())
@@ -253,12 +301,9 @@ export class AnalyticsService {
 
   private calculatePeakActivityHours(): { hour: number; count: number }[] {
     const hourCounts = new Map<number, number>();
+    for (let i = 0; i < 24; i++) hourCounts.set(i, 0);
 
-    for (let i = 0; i < 24; i++) {
-      hourCounts.set(i, 0);
-    }
-
-    for (const email of this.emails) {
+    for (const email of [...this.inboxEmails, ...this.sentEmails]) {
       const hour = email.date.getHours();
       hourCounts.set(hour, (hourCounts.get(hour) || 0) + 1);
     }
@@ -269,18 +314,16 @@ export class AnalyticsService {
       .slice(0, 10);
   }
 
-  private calculateAttachmentStats() {
+  private calculateAttachmentStats(): EmailAnalytics['attachmentStats'] {
     let totalAttachments = 0;
     let totalSizeBytes = 0;
     const typeCounts = new Map<string, number>();
 
-    for (const email of this.emails) {
+    for (const email of [...this.inboxEmails, ...this.sentEmails]) {
       if (email.attachments) {
         totalAttachments += email.attachments.length;
-
         for (const att of email.attachments) {
           totalSizeBytes += att.size;
-
           const type = att.contentType.split('/')[0] || 'other';
           typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
         }
@@ -296,22 +339,28 @@ export class AnalyticsService {
       totalAttachments,
       totalSizeMB: bytesToMB(totalSizeBytes),
       averageSizeMB: totalAttachments > 0 ? bytesToMB(totalSizeBytes / totalAttachments) : 0,
-      mostCommonTypes
+      mostCommonTypes,
     };
   }
 
   getContacts(limit: number = 100): Contact[] {
+    // Clamp: minimum 1, maximum 500.  Prevents accidental or malicious
+    // requests that would serialize thousands of contact records into MCP output.
+    const safeLimit = Math.min(Math.max(1, Math.trunc(limit) || 100), 500);
     return Array.from(this.contacts.values())
       .sort((a, b) => {
         const aTotal = a.emailsSent + a.emailsReceived;
         const bTotal = b.emailsSent + b.emailsReceived;
         return bTotal - aTotal;
       })
-      .slice(0, limit);
+      .slice(0, safeLimit);
   }
 
-  getVolumeTrends(days: number = 30): { date: string; received: number; sent: number }[] {
-    return this.calculateVolumeTrends(days);
+  getVolumeTrends(days: number = 30): EmailAnalytics['volumeTrends'] {
+    // Clamp 1–365.  An unchecked caller could request 10000 days, creating
+    // a 10000-entry map/array and burning proportional CPU allocating it.
+    const safeDays = Math.min(Math.max(1, Math.trunc(days) || 30), 365);
+    return this.calculateVolumeTrends(safeDays);
   }
 
   clearCache(): void {
@@ -320,7 +369,8 @@ export class AnalyticsService {
   }
 
   clearAll(): void {
-    this.emails = [];
+    this.inboxEmails = [];
+    this.sentEmails = [];
     this.contacts.clear();
     this.invalidateCache();
     logger.info('All analytics data cleared', 'AnalyticsService');

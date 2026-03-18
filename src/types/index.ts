@@ -8,6 +8,10 @@ export interface SMTPConfig {
   secure: boolean;
   username: string;
   password: string;
+  /** Optional SMTP token for direct smtp.protonmail.ch submission (paid plans only) */
+  smtpToken?: string;
+  /** Path to exported Proton Bridge TLS certificate for proper localhost cert trust */
+  bridgeCertPath?: string;
 }
 
 export interface IMAPConfig {
@@ -16,6 +20,8 @@ export interface IMAPConfig {
   secure: boolean;
   username: string;
   password: string;
+  /** Path to exported Proton Bridge TLS certificate for proper localhost cert trust */
+  bridgeCertPath?: string;
 }
 
 export interface ProtonMailConfig {
@@ -93,12 +99,14 @@ export interface EmailAnalytics {
     count: number;
     lastContact: Date;
   }[];
+  /** Null when there are no sent replies with matching received emails to measure against. */
   responseTimeStats: {
     average: number;
     median: number;
     fastest: number;
     slowest: number;
-  };
+    sampleSize: number;
+  } | null;
   peakActivityHours: {
     hour: number;
     count: number;
