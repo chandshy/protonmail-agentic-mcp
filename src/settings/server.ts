@@ -49,6 +49,7 @@ import {
 } from "../config/loader.js";
 import {
   ALL_TOOLS,
+  PERMISSION_PRESETS,
   TOOL_CATEGORIES,
   type ServerConfig,
   type PermissionPreset,
@@ -2784,13 +2785,13 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
       // ── POST /api/config ──────────────────────────────────────────────────
       if (method === "POST" && path === "/api/config") {
         if (!requireCsrf(req, res)) return;
-        let body: any;
-        try { body = JSON.parse(await readBodySafe(req)); } catch { json(res, 400, { error: "Request body must be valid JSON." }); return; }
+        let body: Record<string, unknown>;
+        try { body = JSON.parse(await readBodySafe(req)) as Record<string, unknown>; } catch { json(res, 400, { error: "Request body must be valid JSON." }); return; }
         const current = loadConfig() ?? defaultConfig();
 
         // Merge connection settings — never overwrite password with placeholder/empty
-        if (body.connection) {
-          const c = body.connection;
+        if (body.connection && typeof body.connection === "object") {
+          const c = body.connection as Record<string, unknown>;
 
           // Validate port values: must be integers in 1–65535.
           // Reject rather than silently clamp so the user sees an error.
@@ -2826,9 +2827,9 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
             bridgeCertPath:  typeof c.bridgeCertPath === "string" ? c.bridgeCertPath : current.connection.bridgeCertPath,
             debug:           typeof c.debug === "boolean" ? c.debug : current.connection.debug,
             autoStartBridge: typeof c.autoStartBridge === "boolean" ? c.autoStartBridge : current.connection.autoStartBridge,
-            // Only overwrite credentials if a non-empty, non-placeholder value was sent
-            ...(c.password  && c.password !== "••••••••"  ? { password:  c.password  } : {}),
-            ...(c.smtpToken && c.smtpToken !== "••••••••" ? { smtpToken: c.smtpToken } : {}),
+            // Only overwrite credentials if a non-empty, non-placeholder string was sent
+            ...(typeof c.password  === "string" && c.password  && c.password  !== "••••••••" ? { password:  c.password  } : {}),
+            ...(typeof c.smtpToken === "string" && c.smtpToken && c.smtpToken !== "••••••••" ? { smtpToken: c.smtpToken } : {}),
           };
         }
 
@@ -2839,16 +2840,20 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
         }
 
         // Merge permissions
-        if (body.permissions) {
+        if (body.permissions && typeof body.permissions === "object") {
+          const p = body.permissions as Record<string, unknown>;
+          const validPresets = new Set<string>(PERMISSION_PRESETS as unknown as string[]);
           current.permissions = {
-            preset: body.permissions.preset ?? current.permissions.preset,
-            tools:  { ...current.permissions.tools, ...(body.permissions.tools ?? {}) },
+            preset: typeof p.preset === "string" && validPresets.has(p.preset)
+              ? (p.preset as PermissionPreset)
+              : current.permissions.preset,
+            tools:  { ...current.permissions.tools, ...(typeof p.tools === "object" && p.tools !== null ? p.tools as Record<string, boolean> : {}) },
           };
         }
 
         // Merge response limits
-        if (body.responseLimits) {
-          const rl = body.responseLimits;
+        if (body.responseLimits && typeof body.responseLimits === "object") {
+          const rl = body.responseLimits as Record<string, unknown>;
           const validNum = (v: unknown, min: number, max: number): number | undefined =>
             typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? Math.round(v) : undefined;
           const cur = current.responseLimits ?? {
@@ -2894,8 +2899,8 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
       // Host allow-list blocks SSRF probing of internal/cloud-metadata services.
       if (method === "POST" && path === "/api/test-connection") {
         if (!requireCsrf(req, res)) return;
-        let body: any;
-        try { body = JSON.parse(await readBodySafe(req)); } catch { json(res, 400, { error: "Request body must be valid JSON." }); return; }
+        let body: Record<string, unknown>;
+        try { body = JSON.parse(await readBodySafe(req)) as Record<string, unknown>; } catch { json(res, 400, { error: "Request body must be valid JSON." }); return; }
         const { smtpHost, smtpPort, imapHost, imapPort } = body;
 
         // Port validation
@@ -2967,8 +2972,8 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
           json(res, 400, { error: "Invalid challenge ID format." }); return;
         }
 
-        let body: any;
-        try { body = JSON.parse(await readBodySafe(req)); } catch { json(res, 400, { error: "Request body must be valid JSON." }); return; }
+        let body: Record<string, unknown>;
+        try { body = JSON.parse(await readBodySafe(req)) as Record<string, unknown>; } catch { json(res, 400, { error: "Request body must be valid JSON." }); return; }
 
         // Server-side enforcement — JS client validation is not reliable.
         if (body.confirm !== "APPROVE") {
@@ -3081,10 +3086,10 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
             claudeConfigPath = nodePath.join(os.homedir(), ".config", "Claude", "claude_desktop_config.json");
           }
 
-          let existing: any = {};
+          let existing: Record<string, unknown> = {};
           try {
             const raw = readFileSync(claudeConfigPath, "utf8");
-            existing = JSON.parse(raw);
+            existing = JSON.parse(raw) as Record<string, unknown>;
           } catch {
             // File missing or invalid — start fresh
             existing = {};
@@ -3099,7 +3104,7 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
           if (!existing.mcpServers || typeof existing.mcpServers !== "object") {
             existing.mcpServers = {};
           }
-          existing.mcpServers["protonmail"] = entry;
+          (existing.mcpServers as Record<string, unknown>)["protonmail"] = entry;
 
           // Write atomically via temp file + rename
           const tmpPath = claudeConfigPath + ".tmp." + randomBytes(6).toString("hex");

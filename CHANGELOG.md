@@ -5,10 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Autonomous Improvement Cycles #1–#19 (2026-03-18)
+## [Unreleased] — Autonomous Improvement Cycles #1–#41 (2026-03-18)
 
 ### Security
 
+- **`body` JSON parsers in settings server** typed as `Record<string, unknown>` instead of `any`; `permissions.preset` now validated against `PERMISSION_PRESETS` before assignment; credential spreads require `typeof === "string"` guard (Cycle #41)
+- **IMAP search boolean flags** — `isStarred: false` was previously a no-op (unanswered/undraft fields silently ignored by imapflow); fixed to use `SearchObject` boolean API — `seen`/`answered`/`draft` now correctly pass `false` as "not set" (Cycle #40, bug fix)
+- **`search_emails` multi-folder `folders[]`** — each entry now validated via `validateTargetFolder()` to prevent path traversal; service-level `validateFolderName()` also now checks for `..` sequences as defence-in-depth (Cycle #22)
+- **`cancel_scheduled_email`** — UUID format guard added; non-UUID `id` values now return `McpError(InvalidParams)` (Cycle #22)
+- **Settings UI HTML response** — added `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and `Cache-Control` headers (Cycle #22)
+- **`send_email` / `forward_email` / `reply_to_email`** — missing empty-string guard on required string fields added; empty `to`, `body` now return `McpError(InvalidParams)` instead of propagating to SMTP (Cycles #23–#24)
+- **Bulk operations** — empty `emailIds` array now rejected with `McpError(InvalidParams)` rather than silently returning zero-result success (Cycle #23)
+- **`saveDraft` `inReplyTo`** CRLF/NUL stripping added to IMAP path — previously only stripped in SMTP path; crafted `inReplyTo` values with `\r\n` could inject MIME headers (Cycle #28)
+- **`forward_email` subject** capped at 998 chars (RFC 2822) matching all other send handlers (Cycle #29)
+- **`rename_folder`** — same-name guard added; identical old/new name now returns `McpError(InvalidParams)` instead of issuing a spurious IMAP RENAME (Cycle #29)
+- **`send_email` / `schedule_email` `replyTo`** validated via `isValidEmail()` at handler entry (Cycle #30)
+- **Body max-length cap** (10 MB) added to `send_email`, `save_draft`, `schedule_email`, `reply_to_email`, `forward_email` (Cycles #33–#34)
+- **`wipeString()` / `wipeObject()`** in `src/security/memory.ts` typed as `Record<string, unknown>` (was `any`) (Cycle #41)
 - **Path traversal prevention** — `get_emails_by_label`, `move_to_folder`, `remove_label`, `bulk_remove_label` now validate label/folder args via `validateLabelName()` / `validateTargetFolder()` before use in IMAP paths (Cycle #1)
 - **`decodeCursor` folder field** now validated via `validateTargetFolder()` — crafted cursors with traversal paths (e.g. `../../etc`) are rejected as invalid (Cycle #5)
 - **`save_draft` attachment sanitization** — filename stripped of CRLF/NUL and truncated to 255 chars; contentType validated against type/subtype regex before MIME construction (Cycle #9)
@@ -29,6 +42,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Type safety milestone (Cycles #37–#41)** — all `catch (e: any)` blocks replaced with `catch (e: unknown)` across entire codebase; `SearchObject` imported from imapflow replacing hand-rolled `ImapSearchCriteria`; `SendMailOptions` from nodemailer replacing `mailOptions: any`; `ImapBodyNode` interface for bodyStructure traversal; `body: any` JSON parsers in settings server replaced with `Record<string, unknown>`; `wipeString/wipeObject` parameters tightened. Zero `any` catch blocks or avoidable `any` type annotations remain in production source.
+- **Parameter type guards** — comprehensive runtime type checks added across all 47 tool handlers for string, number, boolean, array, and enum fields; all guards throw `McpError(InvalidParams)` with actionable messages (Cycles #20–#36)
+- **`imapSecure` flag** added to IMAP connection config (Cycle #21, implicit TLS support)
 - **Type safety** — 9 avoidable `as any` casts removed from `src/index.ts`, `analytics-service.ts`, and `simple-imap-service.ts`; `AppendResult` local interface introduced to replace `(result as any).uid`; all production `as any` casts eliminated (Cycles #10–#12)
 - **`move_to_label` / `bulk_move_to_label`** inline validation replaced with `validateLabelName()` helper calls (Cycle #14)
 - **`SchedulerService.pruneHistory()`** added — drops non-pending records older than 30 days and caps list at 1 000 entries on load (Cycle #2)
@@ -38,7 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Test suite** — 416 tests pass (was 212 before Cycle #1); +204 tests added across Cycles #1–#19 covering all new validation paths, helpers, and security guards
+- **IMAP `isStarred: false` search** — was silently ignored (imapflow non-existent `unflagged` field); now correctly passes `flagged: false` (Cycle #40)
+- **`search_emails` date cross-validation** — `dateFrom > dateTo` now returns `McpError(InvalidParams)` instead of silently returning zero results (Cycle #25)
+- **Test suite** — 849 tests pass (was 212 before Cycle #1); +637 tests added across Cycles #1–#41 covering all new validation paths, helpers, and security guards
 
 ### Documentation
 

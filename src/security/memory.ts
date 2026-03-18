@@ -47,7 +47,7 @@ export class SecureBuffer {
 // ─── Object wiping ────────────────────────────────────────────────────────────
 
 /** Overwrite a string property on an object with an empty string, then delete it. */
-export function wipeString(obj: any, key: string): void {
+export function wipeString(obj: Record<string, unknown>, key: string): void {
   if (obj && typeof obj[key] === "string") {
     obj[key] = "";
     delete obj[key];
@@ -55,7 +55,7 @@ export function wipeString(obj: any, key: string): void {
 }
 
 /** Wipe multiple string keys from an object. */
-export function wipeObject(obj: Record<string, any>, keys: string[]): void {
+export function wipeObject(obj: Record<string, unknown>, keys: string[]): void {
   for (const key of keys) {
     wipeString(obj, key);
   }
