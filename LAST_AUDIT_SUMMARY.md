@@ -1,56 +1,60 @@
-# Last Audit Summary — Cycle #16
-**Date:** 2026-03-18 04:05 Eastern
+# Last Audit Summary — Cycle #17
+**Date:** 2026-03-18 04:25 Eastern
 **Auditor:** Claude Sonnet 4.6 (auto-improve cycle)
 
 ---
 
 ## Scope
 
-This cycle performed a README accuracy audit:
-- `README.md` — tool count claims, `get_connection_status` description, tool table completeness
-- `src/index.ts` — authoritative tool list (all `server.tool()` registrations)
-- `CHANGELOG.md` — coverage of cycles 1–15 improvements
+This cycle audited:
+- `src/index.ts` — all 5 registered MCP prompts (names, descriptions, arguments)
+- `README.md` — "MCP Prompts" subsection completeness
+- `src/settings/server.ts` — POST body validation on all routes; embedded HTML accuracy
+- `src/settings/tui.ts` — general security scan
+- `src/permissions/escalation.ts` — expiry check re-verification
 
 ---
 
 ## Issues Confirmed / Fixed This Cycle
 
-**[DONE] Tool count incorrect throughout README and CHANGELOG**
+**[DONE] README MCP Prompts section missing 2 of 5 prompts**
 
-The README tagline said "45 tools" and Full Access preset description said "All 45 tools". The CHANGELOG [2.1.0] said "5 new tools (45 total)". Inspection of `src/index.ts` lines 292–1324 shows **47 tools** registered via `server.tool()`. The pre-cycle codebase already had 47 tools; the documentation was simply never corrected after the v2.1.0 release notes were written.
+`src/index.ts` registers 5 prompts in `ListPromptsRequestSchema`:
+`triage_inbox`, `compose_reply`, `daily_briefing`, `find_subscriptions`, `thread_summary`.
 
-Fix: Updated all three occurrences (README tagline, README Full Access row, CHANGELOG) to 47.
+The README listed only 3 (`compose_reply`, `thread_summary`, `find_subscriptions`).
+Fix: replaced the 3-item bullet list with a 5-row table covering all prompts and their arguments.
 
-**[DONE] `get_connection_status` description incomplete**
+**[DONE] Settings server embedded HTML — "40 tools" stale in two places**
 
-The README table one-liner did not mention `imap.healthy` (the live NOOP probe added in Cycle #14) or the `insecureTls` fields (added in v2.1.0). The description was extended to note these fields explicitly.
-
-**[DONE] CHANGELOG had no entry for cycles 1–15 work**
-
-Added a comprehensive `[Unreleased]` section covering security hardening, type safety improvements, DRY refactoring, JSDoc coverage, and test suite growth from Cycles #1–#15.
-
----
-
-## New Findings This Cycle
-
-### README — 5 MCP Prompts not listed in tool table (intentional, not a bug)
-The README does have a "MCP Prompts" subsection that lists the 3 prompts visible in the tool documentation (`compose_reply`, `thread_summary`, `find_subscriptions`). However, `src/index.ts` registers 5 prompts: `triage_inbox`, `compose_reply`, `daily_briefing`, `find_subscriptions`, `thread_summary`. The README only mentions 3. This could be updated to list all 5. Low priority.
-
-### `bulk_delete` alias — README could clarify it's an alias
-The README table for `bulk_delete` says "Alias for `bulk_delete_emails`" — this is accurate. No change needed.
-
-### Cursor token HMAC binding (Item #5, still open)
-Still a future/architectural improvement. No new information.
+`src/settings/server.ts` lines 714 and 946 both said "All 40 tools" in the Full Access preset description. README (fixed Cycle #16) and CHANGELOG already said 47; the embedded HTML was overlooked.
+Fix: both occurrences updated to "47 tools".
 
 ---
 
 ## Confirmed Clean Areas
 
-- Tool table in README is complete — all 47 tools are listed.
-- `get_connection_status` outputSchema in `src/index.ts` accurately documents `imap.healthy` (added Cycle #14).
-- 5 newest tools (`save_draft`, `schedule_email`, `list_scheduled_emails`, `cancel_scheduled_email`, `download_attachment`) described accurately in README.
-- Zero avoidable `as any` casts (confirmed from Cycles #10–#12, unchanged).
-- **416 tests pass** (unchanged from Cycle #15).
+**Settings server route validation — no gaps:**
+- `POST /api/config`: port (integer 1–65535), host (non-empty, ≤253 chars, no control/whitespace), preset validated.
+- `POST /api/preset`: allowlist `["full","read_only","supervised","send_only","custom"]` enforced.
+- `POST /api/test-connection`: port, host, SSRF host allowlist all enforced.
+- `POST /api/escalations/:id/approve`: 4-layer gate (rate limit + CSRF + Origin + `body.confirm === "APPROVE"`).
+- `POST /api/escalations/:id/deny`: rate limit + CSRF.
+- `POST /api/reset`: CSRF only (no body needed).
+
+**Escalation expiry check intact (`src/permissions/escalation.ts` line 394):**
+`if (Date.now() > new Date(e.expiresAt).getTime()) return { ok: false, error: "Challenge has expired." }`
+Both `evictExpired()` (auto-marks pending → expired on read) and `approveEscalation()` (rejects late approvals) working correctly.
+
+**Rate limiting confirmed:**
+- General limiter: 120 req/min per IP wraps all routes.
+- Escalation limiter: 20 req/min per IP wraps approve/deny routes.
+- Both instantiated at server startup; no bypass paths found.
+
+**TUI (`src/settings/tui.ts`):** No security concerns. Prompts are MCP-layer only; TUI has no access to or awareness of prompt registration.
+
+**Zero avoidable `as any` casts** — confirmed clean from Cycles #10–#12, unchanged.
+**416 tests pass** — unchanged.
 
 ---
 
@@ -59,7 +63,18 @@ Still a future/architectural improvement. No new information.
 | Severity | Count | Status |
 |----------|-------|--------|
 | HIGH     | 0     | — |
-| MEDIUM   | 1     | Tool count wrong in README + CHANGELOG — FIXED |
-| LOW      | 2     | `get_connection_status` desc incomplete — FIXED; 5 MCP prompts not all listed — deferred |
+| MEDIUM   | 0     | — |
+| LOW      | 3     | All fixed: MCP prompts docs (2 missing), "40 tools" in HTML (2 occurrences) |
 
-Next focus: Cycle #17 — With documentation now accurate, consider whether further code-level improvements remain. Candidates: (a) cursor HMAC binding (Item #5), (b) `ensureConnection()` friendly error wrapping (Item #31, low priority), (c) listing all 5 MCP prompts in README. Alternatively, declare the codebase mature and use remaining cycles for a comprehensive final audit report.
+---
+
+## Next Cycle Focus
+
+Documentation and code quality are now in excellent shape after 17 cycles. Remaining open items:
+
+1. **Cursor HMAC binding** (Item #5) — architectural improvement, moderate complexity, low security impact. Still deferred.
+2. **`ensureConnection()` friendly error wrapping** (Item #31) — low priority usability improvement.
+3. **`save_draft`/`schedule_email` attachment validation** (Item #14 from Cycle #8) — completed in Cycle #15 but the TODO entry was retained as a reference; confirmed DONE.
+4. **Final comprehensive audit report** — With ~3-4 cycles remaining in the session window, consider producing a structured final audit report documenting the cumulative security posture of the codebase.
+
+The codebase has reached a high level of maturity. No critical or high-severity issues have been open since Cycle #1. Consider declaring a "maintenance complete" state for this session.

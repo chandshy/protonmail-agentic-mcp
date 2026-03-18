@@ -4,6 +4,49 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #17
+**Timestamp:** 2026-03-18 04:25–04:40 Eastern
+**Git commit:** `f6ed4b1`
+**Branch:** main
+**Model:** claude-sonnet-4-6
+
+### Audit Highlights
+
+**MCP Prompts section incomplete in README:**
+The `ListPromptsRequestSchema` handler in `src/index.ts` registers 5 prompts: `triage_inbox`, `compose_reply`, `daily_briefing`, `find_subscriptions`, `thread_summary`. The README "MCP Prompts" subsection listed only 3 (`compose_reply`, `thread_summary`, `find_subscriptions`) — `triage_inbox` and `daily_briefing` were absent. This was flagged as a new finding in Cycle #16's LAST_AUDIT_SUMMARY.
+
+**Stale "40 tools" in settings server embedded HTML:**
+`src/settings/server.ts` contained two occurrences of "40 tools" in the Full Access preset description — once in the preset comparison table (line 714) and once in the setup wizard (line 946). The README was corrected to 47 in Cycle #16, but the embedded HTML was not checked at that time.
+
+**Security sweep — all clear:**
+- `POST /api/config`: ports validated as integers 1–65535, hosts validated (non-empty, ≤253 chars, no control chars/whitespace), preset validated against allowlist. No gaps.
+- `POST /api/preset`: validated against `["full","read_only","supervised","send_only","custom"]` allowlist.
+- `POST /api/test-connection`: ports, hosts, SSRF host allowlist all enforced.
+- `POST /api/escalations/:id/approve`: 4-layer gate intact (rate limit + CSRF + Origin + `body.confirm === "APPROVE"`).
+- `approveEscalation()` expiry check: `Date.now() > new Date(e.expiresAt).getTime()` — confirmed intact (line 394).
+- `evictExpired()`: pending escalations auto-expire on read. Confirmed working.
+- General rate limiter (120/min) wraps all routes. Escalation-specific limiter (20/min) wraps approve/deny. Both confirmed.
+- TUI (`src/settings/tui.ts`): no prompts references, no security concerns.
+
+### Work Completed This Cycle
+
+1. **README — MCP Prompts table expanded** (`README.md`)
+   - Replaced bare 3-item bullet list with a 5-row markdown table.
+   - Added `triage_inbox` (with `limit` and `focus` arguments) and `daily_briefing` (no arguments).
+   - All 5 registered prompts now documented with their arguments.
+
+2. **Settings UI — "40 tools" corrected to "47 tools"** (`src/settings/server.ts`)
+   - Line 714: preset comparison table Full Access description.
+   - Line 946: setup wizard Full Access preset card description.
+   - Both now match the correct count of 47, consistent with README (fixed Cycle #16) and CHANGELOG.
+
+### Validation Results
+
+- Build: clean (`tsc` no errors)
+- Tests: **416/416 pass** (unchanged — doc-only change for README; string-only change for server.ts HTML)
+
+---
+
 ## Cycle #16
 **Timestamp:** 2026-03-18 04:05–04:20 Eastern
 **Git commit:** `be30584`

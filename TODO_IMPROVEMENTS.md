@@ -179,6 +179,12 @@ Added `validateAttachments()` helper to `src/utils/helpers.ts`. Called in all th
 ### [DONE - Cycle 16] README accuracy — tool count and `get_connection_status` description
 Corrected tool count from 45 → 47 in README tagline, README Full Access preset row, and CHANGELOG [2.1.0]. Extended `get_connection_status` table description to mention `imap.healthy` (NOOP probe) and `insecureTls` fields. Added comprehensive `[Unreleased]` CHANGELOG section documenting all Cycle #1–#15 improvements.
 
+### [DONE - Cycle 17] README — all 5 MCP prompts now listed
+Expanded README "MCP Prompts" subsection from a 3-item bullet list to a 5-row table. Added `triage_inbox` (limit, focus args) and `daily_briefing` (no args). Now matches all 5 prompts registered in `ListPromptsRequestSchema` in `src/index.ts`.
+
+### [DONE - Cycle 17] Settings UI embedded HTML — "40 tools" corrected to "47 tools"
+Fixed two occurrences of "All 40 tools" in `src/settings/server.ts` (preset comparison table + setup wizard card). Now consistent with README and CHANGELOG (all say 47).
+
 ### 31. `ensureConnection()` friendly error wrapping (carried from Cycle #12, assessed in Cycle #14)
 **File:** `src/services/simple-imap-service.ts`
 **Issue:** Raw imapflow errors propagate on reconnect failure. Existing logger context is reasonable but user-facing error text could be friendlier. Assessed: current messages are "IMAP connection lost, attempting to reconnect" + the raw error. Low priority — skip unless a concrete usability complaint surfaces.
