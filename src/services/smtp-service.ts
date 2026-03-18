@@ -106,6 +106,7 @@ export class SMTPService {
     logger.info("SMTP transporter initialized", "SMTPService");
   }
 
+  /** Verify the SMTP transporter can authenticate with the Bridge. Returns true on success. */
   async verifyConnection(): Promise<boolean> {
     logger.debug("Verifying SMTP connection", "SMTPService");
 
@@ -123,6 +124,11 @@ export class SMTPService {
     }
   }
 
+  /**
+   * Send an email via the Proton Bridge SMTP relay.
+   * @param options Recipient(s), subject, body, attachments, and optional headers
+   * @returns Object with success flag, SMTP messageId on success, or error string on failure
+   */
   async sendEmail(
     options: SendEmailOptions
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
@@ -318,6 +324,12 @@ export class SMTPService {
     }
   }
 
+  /**
+   * Send a diagnostic test email to verify end-to-end SMTP delivery.
+   * @param to Recipient email address (must be a valid RFC 5321 address)
+   * @param customMessage Optional HTML body to use instead of the default test message
+   * @returns Object with success flag, SMTP messageId on success, or error string on failure
+   */
   async sendTestEmail(
     to: string,
     customMessage?: string
@@ -344,6 +356,7 @@ export class SMTPService {
     });
   }
 
+  /** Close and release the SMTP transporter connection pool. */
   async close(): Promise<void> {
     if (this.transporter) {
       logger.debug("Closing SMTP transporter", "SMTPService");

@@ -11,6 +11,9 @@ import { EmailMessage, EmailFolder, SearchEmailOptions, SaveDraftOptions } from 
 import { logger } from '../utils/logger.js';
 import { extractEmailAddress, extractName, generateId } from '../utils/helpers.js';
 
+/** imapflow's append() return value includes uid at runtime but it is omitted from the type declaration. */
+interface AppendResult { uid?: number }
+
 /**
  * Truncate email body to a reasonable length for list views
  * @param body The full email body
@@ -96,6 +99,14 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Establish an authenticated IMAP connection to the Proton Bridge.
+   * @param host Bridge hostname (default: localhost)
+   * @param port Bridge IMAP port (default: 1143)
+   * @param username Bridge login username
+   * @param password Bridge login password
+   * @param bridgeCertPath Optional path to a Bridge TLS certificate for localhost trust
+   */
   async connect(host: string = 'localhost', port: number = 1143, username?: string, password?: string, bridgeCertPath?: string): Promise<void> {
     logger.debug('Connecting to IMAP server', 'IMAPService', { host, port });
 
@@ -174,6 +185,7 @@ export class SimpleIMAPService {
     }
   }
 
+  /** Log out and close the IMAP connection gracefully. */
   async disconnect(): Promise<void> {
     if (this.client && this.isConnected) {
       logger.debug('Disconnecting from IMAP server', 'IMAPService');
@@ -208,10 +220,12 @@ export class SimpleIMAPService {
     }
   }
 
+  /** Returns true if the IMAP connection is currently active. */
   isActive(): boolean {
     return this.isConnected && this.client !== null;
   }
 
+  /** Fetch all IMAP folders with message and unseen counts. Results are cached. */
   async getFolders(): Promise<EmailFolder[]> {
     logger.debug('Fetching folders', 'IMAPService');
 
@@ -254,6 +268,13 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Fetch a paginated list of emails from an IMAP folder.
+   * @param folder Folder path (default: INBOX)
+   * @param limit Max emails to return, clamped to 1–200 (default: 50)
+   * @param offset Zero-based start index within the folder (default: 0)
+   * @returns Array of EmailMessage objects, newest first
+   */
   async getEmails(folder: string = 'INBOX', limit: number = 50, offset: number = 0): Promise<EmailMessage[]> {
     this.validateFolderName(folder);
     limit = Math.min(Math.max(1, limit ?? 50), 200);
@@ -367,6 +388,11 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Fetch a single email by its IMAP UID. Searches all folders; results are cached.
+   * @param emailId Numeric UID string (e.g. "12345")
+   * @returns The EmailMessage, or null if not found
+   */
   async getEmailById(emailId: string): Promise<EmailMessage | null> {
     this.validateEmailId(emailId);
     logger.debug('Fetching email by ID', 'IMAPService', { emailId });
@@ -529,6 +555,11 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Search emails across one or more folders using IMAP SEARCH criteria.
+   * @param options Search filters (from, to, subject, dateFrom, dateTo, isRead, isStarred, folders)
+   * @returns Array of matching EmailMessage objects, up to the configured per-folder limit
+   */
   async searchEmails(options: SearchEmailOptions): Promise<EmailMessage[]> {
     logger.debug('Searching emails', 'IMAPService', options);
 
@@ -771,7 +802,7 @@ export class SimpleIMAPService {
       const draftsPath = await this.findDraftsFolder();
       const result = await this.client.append(draftsPath, rawMime, ['\\Draft']);
 
-      const uid = result && typeof result === 'object' ? (result as any).uid : undefined;
+      const uid = result && typeof result === 'object' ? (result as AppendResult).uid : undefined;
       logger.info('Draft saved', 'IMAPService', { uid });
       return { success: true, uid };
     } catch (error: any) {
@@ -780,6 +811,12 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Set the \Seen flag on an email.
+   * @param emailId Numeric UID string of the email to update
+   * @param isRead true to mark as read, false to mark as unread (default: true)
+   * @returns true on success, false if not connected or email not found
+   */
   async markEmailRead(emailId: string, isRead: boolean = true): Promise<boolean> {
     this.validateEmailId(emailId);
     logger.debug('Marking email read status', 'IMAPService', { emailId, isRead });
@@ -821,6 +858,12 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Set the \Flagged (starred) flag on an email.
+   * @param emailId Numeric UID string of the email to update
+   * @param isStarred true to star, false to unstar (default: true)
+   * @returns true on success, false if not connected or email not found
+   */
   async starEmail(emailId: string, isStarred: boolean = true): Promise<boolean> {
     this.validateEmailId(emailId);
     logger.debug('Starring email', 'IMAPService', { emailId, isStarred });
@@ -862,6 +905,12 @@ export class SimpleIMAPService {
     }
   }
 
+  /**
+   * Move an email to a different IMAP folder.
+   * @param emailId Numeric UID string of the email to move
+   * @param targetFolder Destination folder path (e.g. "Trash", "Folders/Work")
+   * @returns true on success, false if not connected or email not found
+   */
   async moveEmail(emailId: string, targetFolder: string): Promise<boolean> {
     this.validateEmailId(emailId);
     this.validateFolderName(targetFolder);
@@ -1193,7 +1242,7 @@ export class SimpleIMAPService {
           if (att.content && Buffer.isBuffer(att.content)) {
             (att.content as Buffer).fill(0);
           }
-          (att as any).content = undefined;
+          att.content = undefined;
         }
       }
     }
