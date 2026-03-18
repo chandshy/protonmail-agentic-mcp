@@ -56,4 +56,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive logging
 - Error tracking and recovery
 
-[1.0.0]: https://github.com/barhatch/protonmail-mcp-server/releases/tag/v1.0.0
+[1.0.0]: https://github.com/chandshy/protonmail-mcp-server/releases/tag/v1.0.0

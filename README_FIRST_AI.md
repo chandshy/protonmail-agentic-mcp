@@ -322,7 +322,7 @@ Returns `{ ok, challengeId?, error? }`. If `ok` is true, you receive a
 **Important:**
 - You cannot approve your own escalation. A human must do it.
 - Challenges expire after 5 minutes.
-- Max 10 escalation requests per hour; max 3 pending at once.
+- Max 5 escalation requests per hour; max 1 pending at a time.
 - Be specific and honest in the `reason` field — the human sees it verbatim.
 
 #### `check_escalation_status`

@@ -1,7 +1,7 @@
 {
   "name": "protonmail-mcp-server",
   "version": "2.0.0",
-  "description": "Professional ProtonMail MCP server with 26 tools, Resources, and Prompts for agentic email management, folder operations, analytics, and Proton Bridge integration.",
+  "description": "Professional ProtonMail MCP server with 30 tools, Resources, and Prompts for agentic email management, folder operations, analytics, and Proton Bridge integration.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -46,17 +46,17 @@
     "email-automation"
   ],
   "author": {
-    "name": "Tom Miller",
-    "email": "tom@barhatch.co.uk"
+    "name": "Charles Handshy",
+    "email": "chandshy@gmail.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/barhatch/protonmail-mcp-server#readme",
+  "homepage": "https://github.com/chandshy/protonmail-mcp-server#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/barhatch/protonmail-mcp-server.git"
+    "url": "git+https://github.com/chandshy/protonmail-mcp-server.git"
   },
   "bugs": {
-    "url": "https://github.com/barhatch/protonmail-mcp-server/issues"
+    "url": "https://github.com/chandshy/protonmail-mcp-server/issues"
   },
   "engines": {
     "node": ">=20.0.0",

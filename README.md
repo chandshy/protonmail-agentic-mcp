@@ -1,6 +1,6 @@
 # ProtonMail MCP Server
 
-[![CI](https://github.com/barhatch/protonmail-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/barhatch/protonmail-mcp-server/actions/workflows/ci.yml)
+[![CI](https://github.com/chandshy/protonmail-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/chandshy/protonmail-mcp-server/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/protonmail-mcp-server.svg)](https://www.npmjs.com/package/protonmail-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/protonmail-mcp-server.svg)](https://www.npmjs.com/package/protonmail-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -79,7 +79,7 @@ npm install -g protonmail-mcp-server
 ### Option B — From source
 
 ```bash
-git clone https://github.com/barhatch/protonmail-mcp-server.git
+git clone https://github.com/chandshy/protonmail-mcp-server.git
 cd protonmail-mcp-server
 npm install
 npm run build
@@ -304,7 +304,7 @@ The escalation system lets an AI agent request broader permissions when it needs
 - **Two separate channels**: the agent requests via MCP (unattended process), but approval can only happen via browser or terminal — channels the agent cannot write to.
 - **Human confirmation required**: you must type the word `APPROVE` before the button activates — no accidental clicks.
 - **CSRF-protected**: the approval API requires a token embedded only in the HTML page; raw HTTP requests cannot forge it.
-- **Rate-limited**: max 10 escalation requests per hour, max 3 pending at once.
+- **Rate-limited**: max 5 escalation requests per hour, max 1 pending at a time.
 - **Audit trail**: every request, approval, and denial is appended to `~/.protonmail-mcp.audit.jsonl`.
 - **Third-device support**: start the settings server with `--lan` to approve from your phone or tablet.
 
@@ -415,7 +415,7 @@ Credentials are saved to `~/.protonmail-mcp.json` with `0600` permissions (owner
 ## 12. Development
 
 ```bash
-git clone https://github.com/barhatch/protonmail-mcp-server.git
+git clone https://github.com/chandshy/protonmail-mcp-server.git
 cd protonmail-mcp-server
 npm install
 
@@ -463,4 +463,4 @@ MIT — see [LICENSE](LICENSE)
 
 *Unofficial third-party server. Not affiliated with or endorsed by Proton AG.*
 
-[GitHub](https://github.com/barhatch/protonmail-mcp-server) · [npm](https://www.npmjs.com/package/protonmail-mcp-server) · [Issues](https://github.com/barhatch/protonmail-mcp-server/issues) · [Model Context Protocol](https://modelcontextprotocol.io)
+[GitHub](https://github.com/chandshy/protonmail-mcp-server) · [npm](https://www.npmjs.com/package/protonmail-mcp-server) · [Issues](https://github.com/chandshy/protonmail-mcp-server/issues) · [Model Context Protocol](https://modelcontextprotocol.io)
