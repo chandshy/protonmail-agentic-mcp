@@ -4,6 +4,70 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #43 — Eliminate last any types in tray.ts (loop end)
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commit:** 21eed86
+
+### Work Completed
+- `import type SysTrayClass, { MenuItem } from "systray2"` — type-only imports from ambient module
+- `SysTray: SysTrayConstructor | undefined` — replaces `any`
+- `tray: InstanceType<SysTrayConstructor>` — replaces `any`
+- `sep: MenuItem` — direct type, no cast needed
+- **ZERO `any` type annotations anywhere in production TypeScript source**
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 854/854 passed
+- `grep -rn ": any" src/ | grep -v ".test."` → 0 results
+
+### Git Status
+Pushed. Commit `21eed86` on `main`.
+
+---
+
+## Cycle #42 — Email cache byte-size limit + systray2 ambient types
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commit:** 279aeec
+
+### Work Completed
+1. `MAX_EMAIL_CACHE_BYTES = 50 MB` + `cacheByteEstimate` counter
+2. `evictCacheEntry(id)` / `clearCacheAll()` — 11 direct cache mutation sites updated
+3. `setCacheEntry` evicts on BOTH count (500) AND byte (50 MB) limits
+4. `src/types/systray2.d.ts` — ambient module types for systray2
+5. 5 new unit tests covering byte eviction, estimate, count cap, update-in-place
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 854/854 passed (+5 new)
+
+### Git Status
+Pushed. Commit `279aeec` on `main`.
+
+---
+
+## Cycle #41 — Eliminate all remaining any types in production code
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commit:** 46aaa10
+
+### Work Completed
+1. `wipeString/wipeObject` params: `any` → `Record<string, unknown>` (memory.ts)
+2. `body: any` → `Record<string, unknown>` in all 3 JSON body handlers (settings/server.ts)
+3. `existing: any` → `Record<string, unknown>` in write-claude-desktop handler
+4. `PERMISSION_PRESETS` imported for preset validation; credential spreads add `typeof==="string"` guard
+5. CHANGELOG expanded to cover all Cycles #1–#41
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 849/849 passed
+
+### Git Status
+Pushed. Commit `46aaa10` on `main`.
+
+---
+
 ## Cycle #40 — Complete any elimination in simple-imap-service.ts; import SearchObject from imapflow
 **Timestamp:** 2026-03-18
 **Branch:** main
