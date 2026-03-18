@@ -276,6 +276,71 @@ No new HIGH/MEDIUM issues found. Confirmed all cycle 1–4 fixes still intact.
 
 ---
 
+## Cycle #7
+**Timestamp:** 2026-03-18 01:05–01:15 Eastern
+**Git commit:** `714ec11`
+**Branch:** main
+**Model:** claude-sonnet-4-6
+
+### Audit Highlights (new findings this cycle)
+
+No new HIGH/MEDIUM issues found. Confirmed all cycle 1–6 fixes still intact.
+
+**Confirmed from Next Cycle Focus list:**
+- `create_folder` handler — `args.folderName as string` passed directly to IMAP service with no handler-level `validateFolderName()` call. Service's private `validateFolderName()` does protect, but throws a raw `Error` (opaque internal message). (now fixed)
+- `delete_folder` handler — same gap as `create_folder`. (now fixed)
+- `rename_folder` handler — `args.oldName` and `args.newName` both unguarded at handler level. (now fixed)
+- `mark_email_read` / `star_email` handlers — `args.emailId as string` had no numeric UID guard at handler level, unlike `get_email_by_id` (fixed in Cycle #5). Service's private `validateEmailId` throws raw `Error`. (now fixed)
+
+**Additional audit findings (no new issues):**
+- `reply_to_email` `inReplyTo` and `references` come from `original.inReplyTo` / `original.references` (fetched from IMAP trusted storage), not user args. SMTP service applies `stripHeaderInjection` on outbound — no additional guard needed.
+- `sync_folders` takes no args — no validation needed.
+- `save_draft` `inReplyTo`/`references` come from user args but are passed to SMTP service which sanitizes them via `stripHeaderInjection`. No injection risk identified.
+- `mark_email_unread` does not exist as a separate case — handled by `mark_email_read` with `isRead: false`.
+- `unstar_email` does not exist as a separate case — handled by `star_email` with `isStarred: false`.
+
+**Systematic scan conclusion:** All string args in switch cases that reach IMAP path construction or SMTP now have either handler-level validation or are protected by hardcoded literals / service-layer sanitization. No new gaps found beyond the 5 handlers addressed this cycle.
+
+### Work Completed This Cycle
+
+1. **`create_folder`** — Added `validateFolderName(args.folderName)` check at handler entry. Returns `McpError(InvalidParams)` for empty, slash-containing, traversal, control-char, or oversized names before IMAP call. (+4 lines)
+
+2. **`delete_folder`** — Added identical `validateFolderName(args.folderName)` check. (+3 lines)
+
+3. **`rename_folder`** — Added `validateFolderName(args.oldName)` and `validateFolderName(args.newName)` checks, each prefixing the field name in the error message for clarity. (+5 lines)
+
+4. **`mark_email_read`** — Added `!/^\d+$/.test(merEmailId)` guard matching the existing `get_email_by_id` pattern. Returns `McpError(InvalidParams, "emailId must be a non-empty numeric UID string.")` (+4 lines)
+
+5. **`star_email`** — Same numeric UID guard as `mark_email_read`. (+4 lines)
+
+6. **Add 27 unit tests** — Three new `describe` blocks in `src/utils/helpers.test.ts`:
+   - `create_folder / delete_folder handler validation (validateFolderName)` — 12 tests: valid names, empty, whitespace, null, undefined, slash, traversal, null byte, C0 control char, exact-255 boundary, 256 over-limit
+   - `rename_folder handler validation (validateFolderName for oldName and newName)` — 5 tests: valid oldName/newName, traversal in oldName, empty newName, slash in newName
+   - `mark_email_read / star_email handler validation (numeric emailId guard)` — 10 tests: valid "42", valid "1", empty, alphabetic, mixed, negative, float, null, undefined, null-byte injection
+   (+125 lines in helpers.test.ts)
+
+**Files changed:** `src/index.ts` (+20 lines, -2 lines), `src/utils/helpers.test.ts` (+125 lines)
+
+### Validation Results
+
+- `npm run build` — PASS (0 TypeScript errors)
+- `npm test` — PASS (314/314 tests, 14 test files, +27 new tests vs 287 in cycle 6)
+
+### Git Status
+
+- Commit: `714ec11`
+- Pushed to: `origin/main`
+
+### Next Cycle Focus
+
+**Priority items for Cycle #8:**
+1. Remaining `args.X as Y` casts type-check audit — scan all remaining handlers for `as string` / `as number` / `as boolean` casts where the value reaches a service call without a runtime type-check at handler level. Focus on any cast where the JSON schema type is not strictly enforced by the MCP layer.
+2. `save_draft` / `schedule_email` — audit `args.attachments as any` — check whether attachment objects (name, content, contentType) are validated or sanitized before IMAP `APPEND`.
+3. Cursor token HMAC binding — still deferred (medium effort, low security payoff).
+4. IMAP reconnect / NOOP health check — still deferred (medium effort, moderate risk).
+
+---
+
 ## Cycle #6
 **Timestamp:** 2026-03-18 00:50–01:00 Eastern
 **Git commit:** `403dcaa`

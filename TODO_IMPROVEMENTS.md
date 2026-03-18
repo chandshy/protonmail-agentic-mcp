@@ -1,6 +1,6 @@
 # TODO Improvements — Prioritized Backlog
 
-Last updated: Cycle #5 (2026-03-18)
+Last updated: Cycle #7 (2026-03-18)
 
 ---
 
@@ -71,19 +71,29 @@ Added `MAX_SEARCH_TEXT = 500` and three inline checks in the `search_emails` han
 
 ---
 
-## NEW — Cycle #6 Findings
+## NEW — Cycle #6 Findings (all completed in Cycle #7)
 
-### 11. `create_folder` / `rename_folder` args — validateFolderName check
-**File:** `src/index.ts` `create_folder` and `rename_folder` handlers
-**Issue:** `args.folderName` and `args.newName` may be passed to IMAP service without `validateFolderName()` check at handler level. Service may have internal validation; worth confirming and adding handler-level guard for consistency.
-**Effort:** LOW — ~4 lines each handler
-**Risk:** LOW
+### [DONE - Cycle 7] `create_folder` / `rename_folder` / `delete_folder` args — validateFolderName check
+Added `validateFolderName()` call at handler entry for `create_folder`, `delete_folder` (folderName), and `rename_folder` (oldName and newName). All return `McpError(InvalidParams)` with clear messages for empty, slash, traversal, control-char, or oversized inputs.
 
-### 12. Remaining `args.X as Y` casts — type-check audit
+### [DONE - Cycle 7] `mark_email_read` / `star_email` — missing numeric emailId guard
+Added `!/^\d+$/.test(emailId)` guard to both handlers matching the pattern established in `get_email_by_id` (Cycle #5). Returns `McpError(InvalidParams, "emailId must be a non-empty numeric UID string.")` for invalid inputs.
+
+---
+
+## NEW — Cycle #7 Findings
+
+### 13. Remaining `args.X as Y` casts — type-check audit
 **File:** `src/index.ts`
 **Issue:** Many handlers use `args.X as SomeType` without a runtime check. Most are guarded by JSON schema validation at the MCP layer, but a targeted audit would identify any gaps where a malformed arg could reach a service method unguarded.
 **Effort:** LOW–MEDIUM — audit only, fix if gaps found
 **Risk:** LOW
+
+### 14. `save_draft` / `schedule_email` attachment validation
+**File:** `src/index.ts`, `src/services/simple-imap-service.ts`
+**Issue:** `args.attachments as any` is passed to `imapService.saveDraft()`. Attachment objects (name, contentType, content) are not validated at handler level. The service's `saveDraft` uses the contentType directly in MIME construction.
+**Effort:** LOW–MEDIUM
+**Risk:** LOW (content is base64-encoded; contentType is used as a MIME field and already handled by nodemailer/imapflow encoding)
 
 ---
 
