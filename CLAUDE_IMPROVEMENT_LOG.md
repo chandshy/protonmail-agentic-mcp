@@ -4,6 +4,45 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #46 — MCP prompt handler hardening
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commits:** 96ee901, afcea54, d23fb78
+
+### Work Completed
+1. `get_logs` `level` — added `typeof !== "string"` guard (McpError on non-string)
+2. `diagnosticErrorMessage` — narrowed `error as any` to `{code?,command?,responseCode?}` in `src/index.ts`
+3. `triage_inbox` prompt — NaN limit guard + clamp (1-100)
+4. `thread_summary` prompt — `requireNumericEmailId()` prevents prompt injection via crafted emailId
+5. `find_subscriptions` prompt — `validateTargetFolder()` prevents prompt injection via crafted folder path
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 861/861 passed
+
+### Git Status
+Pushed. Commits `96ee901`, `afcea54`, `d23fb78` on `main`.
+
+---
+
+## Cycle #45 — Narrow diagnosticErrorMessage cast + state file updates
+**Timestamp:** 2026-03-18
+**Branch:** main
+**Commit:** 0908250
+
+### Work Completed
+- `error as any` narrowed to `error as {code?,command?,responseCode?}` in `diagnosticErrorMessage()`
+- State files updated with Cycle #44 summary
+
+### Validation
+- `npm run build` — ✅ clean
+- `npm test` — ✅ 861/861 passed
+
+### Git Status
+Pushed. Commit `0908250` on `main`.
+
+---
+
 ## Cycle #44 — folderCache TTL + coverage thresholds + CHANGELOG
 **Timestamp:** 2026-03-18
 **Branch:** main
