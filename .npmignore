@@ -1,20 +1,26 @@
 # Source files (only ship dist/)
 src/
 tsconfig.json
+vitest.config.ts
 
 # Development files
 .github/
 .claude/
 .vscode/
 .idea/
+docs/
 
 # Test files
 test/
 *.test.ts
 *.test.js
+coverage/
 
-# Documentation (keep README)
+# Documentation (keep README and LICENSE)
 CONTRIBUTING.md
+SECURITY.md
+CHANGELOG.md
+README_FIRST_AI.md
 
 # Environment
 .env
@@ -33,11 +39,6 @@ Thumbs.db
 .git/
 .gitignore
 .gitattributes
-
-# CI/CD
-.travis.yml
-.circleci/
-.github/workflows/
 
 # Misc
 *.swp
