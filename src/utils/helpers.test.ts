@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import {
   parseEmails,
   formatDate,
@@ -12,6 +13,7 @@ import {
   validateLabelName,
   validateFolderName,
   validateTargetFolder,
+  requireNumericEmailId,
 } from './helpers.js';
 
 describe('helpers', () => {
@@ -973,6 +975,73 @@ describe('helpers', () => {
 
     it('contentType with spaces is rejected', () => {
       expect(sanitizeDraftContentType('text /plain')).toBeUndefined();
+    });
+  });
+
+  describe('requireNumericEmailId', () => {
+    // Valid cases — helper should return the string unchanged.
+    it('returns "42" unchanged', () => {
+      expect(requireNumericEmailId('42')).toBe('42');
+    });
+
+    it('returns "1" unchanged', () => {
+      expect(requireNumericEmailId('1')).toBe('1');
+    });
+
+    it('returns "999999" unchanged', () => {
+      expect(requireNumericEmailId('999999')).toBe('999999');
+    });
+
+    // Custom fieldName is reflected in the error message.
+    it('uses custom fieldName in error message', () => {
+      expect(() => requireNumericEmailId('bad', 'email_id')).toThrowError(
+        'email_id must be a non-empty numeric UID string.'
+      );
+    });
+
+    it('defaults fieldName to "emailId" when not supplied', () => {
+      expect(() => requireNumericEmailId('abc')).toThrowError(
+        'emailId must be a non-empty numeric UID string.'
+      );
+    });
+
+    // Error cases — helper should throw McpError(InvalidParams, …).
+    it('throws McpError with ErrorCode.InvalidParams for empty string', () => {
+      const err = (() => { try { requireNumericEmailId(''); } catch (e) { return e; } })();
+      expect(err).toBeInstanceOf(McpError);
+      expect((err as McpError).code).toBe(ErrorCode.InvalidParams);
+    });
+
+    it('throws for alphabetic string "abc"', () => {
+      expect(() => requireNumericEmailId('abc')).toThrow(McpError);
+    });
+
+    it('throws for mixed string "12x"', () => {
+      expect(() => requireNumericEmailId('12x')).toThrow(McpError);
+    });
+
+    it('throws for negative string "-5"', () => {
+      expect(() => requireNumericEmailId('-5')).toThrow(McpError);
+    });
+
+    it('throws for float string "3.14"', () => {
+      expect(() => requireNumericEmailId('3.14')).toThrow(McpError);
+    });
+
+    it('throws for null', () => {
+      expect(() => requireNumericEmailId(null)).toThrow(McpError);
+    });
+
+    it('throws for undefined', () => {
+      expect(() => requireNumericEmailId(undefined)).toThrow(McpError);
+    });
+
+    it('throws for numeric type (not a string)', () => {
+      expect(() => requireNumericEmailId(42)).toThrow(McpError);
+    });
+
+    it('throws for null-byte string "5\\x006"', () => {
+      expect(() => requireNumericEmailId('5\x006')).toThrow(McpError);
     });
   });
 });

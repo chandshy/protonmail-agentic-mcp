@@ -27,7 +27,7 @@ import { SimpleIMAPService } from "./services/simple-imap-service.js";
 import { AnalyticsService } from "./services/analytics-service.js";
 import { SchedulerService } from "./services/scheduler.js";
 import { logger } from "./utils/logger.js";
-import { isValidEmail, validateLabelName, validateFolderName, validateTargetFolder } from "./utils/helpers.js";
+import { isValidEmail, validateLabelName, validateFolderName, validateTargetFolder, requireNumericEmailId } from "./utils/helpers.js";
 import { permissions } from "./permissions/manager.js";
 import {
   requestEscalation,
@@ -1653,10 +1653,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "get_email_by_id": {
-        const rawEmailId = args.emailId as string;
-        if (!rawEmailId || typeof rawEmailId !== "string" || !/^\d+$/.test(rawEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const rawEmailId = requireNumericEmailId(args.emailId);
         const email = await imapService.getEmailById(rawEmailId);
         if (!email) {
           return { content: [{ type: "text" as const, text: "Email not found" }], isError: true, structuredContent: { success: false, reason: "Resource not found" } };
@@ -1819,10 +1816,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "download_attachment": {
-        const rawAttEmailId = args.email_id as string;
-        if (!rawAttEmailId || typeof rawAttEmailId !== "string" || !/^\d+$/.test(rawAttEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "email_id must be a non-empty numeric UID string.");
-        }
+        const rawAttEmailId = requireNumericEmailId(args.email_id, "email_id");
         const rawAttIdx = args.attachment_index as number;
         if (!Number.isInteger(rawAttIdx) || rawAttIdx < 0) {
           throw new McpError(ErrorCode.InvalidParams, "attachment_index must be a non-negative integer.");
@@ -1874,20 +1868,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // ── Email Actions ──────────────────────────────────────────────────────────
 
       case "mark_email_read": {
-        const merEmailId = args.emailId;
-        if (!merEmailId || typeof merEmailId !== "string" || !/^\d+$/.test(merEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const merEmailId = requireNumericEmailId(args.emailId);
         const isRead = args.isRead !== undefined ? (args.isRead as boolean) : true;
         await imapService.markEmailRead(merEmailId, isRead);
         return actionOk();
       }
 
       case "star_email": {
-        const seEmailId = args.emailId;
-        if (!seEmailId || typeof seEmailId !== "string" || !/^\d+$/.test(seEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const seEmailId = requireNumericEmailId(args.emailId);
         const isStarred = args.isStarred !== undefined ? (args.isStarred as boolean) : true;
         await imapService.starEmail(seEmailId, isStarred);
         return actionOk();
@@ -1895,10 +1883,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case "move_email": {
         // Validate emailId format — must be a numeric UID string.
-        const mvEmailId = args.emailId as string;
-        if (!mvEmailId || typeof mvEmailId !== "string" || !/^\d+$/.test(mvEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const mvEmailId = requireNumericEmailId(args.emailId);
         // Validate targetFolder before passing to IMAP — prevents path traversal
         // attacks such as "../../etc/passwd" style folder names.
         const mvValidErr = validateTargetFolder(args.targetFolder);
@@ -1908,28 +1893,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "archive_email": {
-        const aeEmailId = args.emailId as string;
-        if (!aeEmailId || typeof aeEmailId !== "string" || !/^\d+$/.test(aeEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const aeEmailId = requireNumericEmailId(args.emailId);
         await imapService.moveEmail(aeEmailId, "Archive");
         return actionOk();
       }
 
       case "move_to_trash": {
-        const mttEmailId = args.emailId as string;
-        if (!mttEmailId || typeof mttEmailId !== "string" || !/^\d+$/.test(mttEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const mttEmailId = requireNumericEmailId(args.emailId);
         await imapService.moveEmail(mttEmailId, "Trash");
         return actionOk();
       }
 
       case "move_to_spam": {
-        const mtsEmailId = args.emailId as string;
-        if (!mtsEmailId || typeof mtsEmailId !== "string" || !/^\d+$/.test(mtsEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const mtsEmailId = requireNumericEmailId(args.emailId);
         await imapService.moveEmail(mtsEmailId, "Spam");
         return actionOk();
       }
@@ -2017,10 +1993,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "move_to_label": {
-        const mtlEmailId = args.emailId as string;
-        if (!mtlEmailId || typeof mtlEmailId !== "string" || !/^\d+$/.test(mtlEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const mtlEmailId = requireNumericEmailId(args.emailId);
         const label = args.label as string;
         // Validate label before constructing the IMAP folder path.
         // Without this, an empty or slash-containing label can produce paths
@@ -2073,10 +2046,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "remove_label": {
-        const rlEmailId = args.emailId as string;
-        if (!rlEmailId || typeof rlEmailId !== "string" || !/^\d+$/.test(rlEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const rlEmailId = requireNumericEmailId(args.emailId);
         const rlRawTarget = args.targetFolder as string | undefined;
         // Validate caller-supplied targetFolder before use as an IMAP path.
         // Default to INBOX when omitted; reject control characters and path traversal.
@@ -2116,10 +2086,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case "delete_email": {
-        const deEmailId = args.emailId as string;
-        if (!deEmailId || typeof deEmailId !== "string" || !/^\d+$/.test(deEmailId)) {
-          throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
-        }
+        const deEmailId = requireNumericEmailId(args.emailId);
         await imapService.deleteEmail(deEmailId);
         analyticsCache = null; analyticsCacheInflight = null;
         return actionOk();
@@ -2456,11 +2423,8 @@ After presenting your assessment, wait for the user to approve actions, then use
     }
 
     case "compose_reply": {
-      const emailId = args.emailId as string;
       // Validate emailId early so we never embed an adversarial string in the prompt.
-      if (!/^\d+$/.test(emailId)) {
-        throw new McpError(ErrorCode.InvalidParams, "emailId must be a numeric UID string.");
-      }
+      const emailId = requireNumericEmailId(args.emailId);
       // Sanitize agent-supplied intent to prevent prompt injection.
       const intent = sanitizeText(args.intent, 200);
       let emailContent = "Could not load email — use get_email_by_id to fetch it first.";

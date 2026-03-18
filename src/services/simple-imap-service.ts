@@ -225,6 +225,28 @@ export class SimpleIMAPService {
     return this.isConnected && this.client !== null;
   }
 
+  /**
+   * Probe the IMAP connection by sending a NOOP command.
+   *
+   * Unlike `isActive()`, which only inspects the in-memory `isConnected` flag,
+   * this method performs a real round-trip to the server so it can detect
+   * silent TCP drops where the socket is dead but the flag still reads true.
+   *
+   * @returns `true` if the server acknowledged the NOOP, `false` otherwise.
+   *   Never throws — failures are caught and returned as `false`.
+   */
+  async healthCheck(): Promise<boolean> {
+    if (!this.client || !this.isConnected) {
+      return false;
+    }
+    try {
+      await this.client.noop();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   /** Fetch all IMAP folders with message and unseen counts. Results are cached. */
   async getFolders(): Promise<EmailFolder[]> {
     logger.debug('Fetching folders', 'IMAPService');

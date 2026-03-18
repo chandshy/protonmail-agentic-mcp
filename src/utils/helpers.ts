@@ -3,6 +3,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { logger } from "./logger.js";
 
 /**
@@ -246,4 +247,30 @@ export function validateTargetFolder(targetFolder: unknown): string | null {
 export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength - 3) + "...";
+}
+
+/**
+ * Assert that `raw` is a non-empty, all-digit string suitable for use as an
+ * IMAP UID.  Returns the validated string on success or throws an
+ * `McpError(InvalidParams, …)` on failure.
+ *
+ * Centralises the repeated guard pattern found across ~12 tool handlers:
+ *
+ * ```ts
+ * if (!X || typeof X !== "string" || !/^\d+$/.test(X)) {
+ *   throw new McpError(ErrorCode.InvalidParams, "emailId must be a non-empty numeric UID string.");
+ * }
+ * ```
+ *
+ * @param raw       - The raw argument value from the MCP tool call (type `unknown`).
+ * @param fieldName - The argument field name used in the error message, e.g. `"emailId"`.
+ *                    Defaults to `"emailId"`.
+ * @returns The validated UID string.
+ * @throws {McpError} with `ErrorCode.InvalidParams` when validation fails.
+ */
+export function requireNumericEmailId(raw: unknown, fieldName: string = "emailId"): string {
+  if (!raw || typeof raw !== "string" || !/^\d+$/.test(raw)) {
+    throw new McpError(ErrorCode.InvalidParams, `${fieldName} must be a non-empty numeric UID string.`);
+  }
+  return raw;
 }

@@ -234,3 +234,51 @@ describe("SimpleIMAPService.searchEmails (multi-folder)", () => {
     expect(calledWith).toContain("Sent");
   });
 });
+
+// ─── healthCheck tests ─────────────────────────────────────────────────────
+
+describe("SimpleIMAPService.healthCheck", () => {
+  it("returns false when not connected (isConnected = false)", async () => {
+    const svc = new SimpleIMAPService();
+    // isConnected defaults to false and client is null — no connection attempted.
+    const result = await svc.healthCheck();
+    expect(result).toBe(false);
+  });
+
+  it("returns false when client is null even if flag were true", async () => {
+    const svc = new SimpleIMAPService();
+    // Force isConnected = true but leave client = null to exercise the guard.
+    (svc as any).isConnected = true;
+    (svc as any).client = null;
+    const result = await svc.healthCheck();
+    expect(result).toBe(false);
+  });
+
+  it("returns true when connected and noop() resolves", async () => {
+    const svc = new SimpleIMAPService();
+    const mockClient = { noop: vi.fn().mockResolvedValue(undefined) };
+    (svc as any).isConnected = true;
+    (svc as any).client = mockClient;
+    const result = await svc.healthCheck();
+    expect(result).toBe(true);
+    expect(mockClient.noop).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns false when noop() rejects (TCP drop scenario)", async () => {
+    const svc = new SimpleIMAPService();
+    const mockClient = { noop: vi.fn().mockRejectedValue(new Error("ECONNRESET")) };
+    (svc as any).isConnected = true;
+    (svc as any).client = mockClient;
+    const result = await svc.healthCheck();
+    expect(result).toBe(false);
+  });
+
+  it("never throws even when noop() rejects", async () => {
+    const svc = new SimpleIMAPService();
+    const mockClient = { noop: vi.fn().mockRejectedValue(new Error("broken pipe")) };
+    (svc as any).isConnected = true;
+    (svc as any).client = mockClient;
+    // healthCheck must not propagate the error.
+    await expect(svc.healthCheck()).resolves.toBe(false);
+  });
+});
