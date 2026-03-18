@@ -4,6 +4,33 @@ This file records every autonomous improvement cycle run on this codebase.
 
 ---
 
+## Cycle #27 — get_emails_by_label / sync_emails 'limit' type guards
+**Timestamp:** 2026-03-18
+**Branch:** main
+
+### Audit Highlights
+
+**Build & Tests (pre-work):** Clean build, 567/567 tests passing.
+
+**New Findings (all corrected this cycle):**
+
+1. **`get_emails_by_label` — `limit` parameter has no runtime type guard** — The handler used `(args.limit as number) || 50` inside `Math.min(Math.max(...))` without checking that `args.limit` is actually a number. A non-numeric string like `"abc"` produces `NaN` inside `Math.max`, which propagates through both `Math.max` and `Math.min` as `NaN`, meaning the unclamped `NaN` is forwarded to `imapService.getEmails()`. This was inconsistent with `get_emails` and `search_emails` which both received type guards in Cycle #25. Added: `if (args.limit !== undefined && typeof args.limit !== "number") throw new McpError(InvalidParams, "'limit' must be a number.")`.
+
+2. **`sync_emails` — `limit` parameter has no runtime type guard** — Same NaN-propagation issue: `(args.limit as number) || 100` inside `Math.min(Math.max(...))` without a type check. A non-numeric string would produce unclamped `NaN` reaching the IMAP service. Added the same type guard pattern consistent with Cycle #25 (`get_emails`, `search_emails`) and Cycle #24 (`get_contacts`, `get_volume_trends`).
+
+### Changes
+
+- `src/index.ts`: Added `limit` type guard in `get_emails_by_label` (4 lines). Added `limit` type guard in `sync_emails` (4 lines).
+- `src/utils/helpers.test.ts`: Added 22 new tests covering both guard paths: `get_emails_by_label` limit type guard (11 tests), `sync_emails` limit type guard (11 tests).
+
+### Test Results
+
+**Before:** 567 tests passing
+**After:** 589 tests passing (+22)
+**Build:** Clean (0 TypeScript errors)
+
+---
+
 ## Cycle #26 — RFC 2822 subject length cap (send_email/save_draft/schedule_email), escalation handler McpError consistency
 **Timestamp:** 2026-03-18
 **Branch:** main

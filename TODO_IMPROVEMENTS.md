@@ -1,6 +1,6 @@
 # TODO Improvements — Prioritized Backlog
 
-Last updated: Cycle #26 (2026-03-18)
+Last updated: Cycle #27 (2026-03-18)
 
 ---
 
@@ -276,4 +276,14 @@ When both `dateFrom` and `dateTo` are provided, no check was made that `dateFrom
 ### [DONE - Cycle 25] `download_attachment` — `attachment_index` has no upper bound
 The existing guard only checked `!isInteger || < 0` but allowed values like 999999. Requesting absurdly large indices wastes resources and is always a caller error. Added `MAX_ATTACHMENT_INDEX = 50` constant and guard `if (rawAttIdx > MAX_ATTACHMENT_INDEX) throw McpError(InvalidParams)`.
 
-IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 25 cycles
+---
+
+## NEW — Cycle #27 Findings (all completed in Cycle #27)
+
+### [DONE - Cycle 27] `get_emails_by_label` — `limit` parameter no runtime type guard
+The handler used `(args.limit as number) || 50` without checking `typeof args.limit === "number"`. A non-numeric string produces NaN inside Math.max/min, reaching the IMAP service unclamped. Added type guard consistent with get_emails / search_emails (Cycle #25).
+
+### [DONE - Cycle 27] `sync_emails` — `limit` parameter no runtime type guard
+Same NaN-propagation issue: `(args.limit as number) || 100` inside Math.min/max without a type check. Added the same guard pattern.
+
+IMPROVEMENT CYCLES COMPLETE — 2026-03-18 — 27 cycles
