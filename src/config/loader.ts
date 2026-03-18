@@ -180,6 +180,7 @@ export function loadConfig(): ServerConfig | null {
     }
 
     // Merge and clamp response limits — prevents invalid values from disk.
+    // base = defaultConfig() which always populates responseLimits; non-null is safe here.
     const mergedLimits: ResponseLimits = {
       ...base.responseLimits!,
       ...(parsed.responseLimits ?? {}),

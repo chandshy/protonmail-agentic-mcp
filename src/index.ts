@@ -3284,7 +3284,7 @@ async function launchProtonBridge(): Promise<void> {
       }
     }
     logger.warn("Proton Bridge did not become reachable within 15 s — continuing anyway", "MCPServer");
-  } catch (e) {
+  } catch (e: unknown) {
     logger.warn("Failed to auto-start Proton Bridge", "MCPServer", e);
   }
 }
@@ -3311,7 +3311,7 @@ async function killProtonBridge(): Promise<void> {
       p.on("error", () => resolve());
     });
     logger.info("Proton Bridge terminated", "MCPServer");
-  } catch (e) {
+  } catch (e: unknown) {
     logger.debug("Could not terminate Proton Bridge", "MCPServer", e);
   }
 }
@@ -3360,7 +3360,7 @@ function startBridgeWatchdog(): void {
           config.imap.bridgeCertPath, config.imap.secure
         );
         logger.info("IMAP reconnected after Bridge restart", "MCPServer");
-      } catch (e) {
+      } catch (e: unknown) {
         logger.warn("IMAP reconnect failed after Bridge restart", "MCPServer", e);
       }
     }
@@ -3405,7 +3405,7 @@ async function main() {
     if (migrated) {
       logger.info("Credentials migrated to OS keychain", "MCPServer");
     }
-  } catch (e) {
+  } catch (e: unknown) {
     logger.debug("Keychain migration skipped (not available or no credentials to migrate)", "MCPServer");
   }
 
@@ -3449,7 +3449,7 @@ async function main() {
     } else {
       logger.warn("No config file found — run 'npm run settings' to configure", "MCPServer");
     }
-  } catch (e) {
+  } catch (e: unknown) {
     logger.warn("Failed to load config file", "MCPServer", e);
   }
 
@@ -3540,7 +3540,7 @@ async function main() {
             analyticsService.updateEmails(trimForAnalytics(inbox), trimForAnalytics(sent));
             logger.debug(`Background sync: ${inbox.length} inbox, ${sent.length} sent`, 'Scheduler');
           }
-        } catch (e) {
+        } catch (e: unknown) {
           logger.debug('Background sync failed', 'Scheduler', e);
         }
       }, intervalMs).unref(); // .unref() so the timer doesn't prevent clean exit

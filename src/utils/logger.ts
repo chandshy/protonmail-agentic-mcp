@@ -65,24 +65,24 @@ export class Logger {
     return new Date().toISOString();
   }
 
-  debug(message: string, context: string = "System", data?: any): void {
+  debug(message: string, context: string = "System", data?: unknown): void {
     if (this.debugMode) {
       this.log("debug", message, context, data);
       console.error(`${this.ts()} [DEBUG] [${context}] ${message}`, data || "");
     }
   }
 
-  info(message: string, context: string = "System", data?: any): void {
+  info(message: string, context: string = "System", data?: unknown): void {
     this.log("info", message, context, data);
     console.error(`${this.ts()} [INFO] [${context}] ${message}`, data || "");
   }
 
-  warn(message: string, context: string = "System", data?: any): void {
+  warn(message: string, context: string = "System", data?: unknown): void {
     this.log("warn", message, context, data);
     console.error(`${this.ts()} [WARN] [${context}] ${message}`, data || "");
   }
 
-  error(message: string, context: string = "System", error?: any): void {
+  error(message: string, context: string = "System", error?: unknown): void {
     this.log("error", message, context, error);
     console.error(`${this.ts()} [ERROR] [${context}] ${message}`, error || "");
   }
@@ -91,7 +91,7 @@ export class Logger {
     level: "debug" | "info" | "warn" | "error",
     message: string,
     context: string,
-    data?: any
+    data?: unknown
   ): void {
     const entry: LogEntry = {
       timestamp: new Date(),

@@ -220,7 +220,7 @@ export class SchedulerService {
         this.items = this.pruneHistory(valid);
         logger.debug(`Loaded ${this.items.length} scheduled emails from disk`, "Scheduler");
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn("Failed to load scheduled emails from disk — starting fresh", "Scheduler", err);
       this.items = [];
     }
@@ -275,7 +275,7 @@ export class SchedulerService {
       // temp file's mode on POSIX, but chmod is a no-op-safe belt-and-suspenders
       // guard; silently ignored on Windows where chmod has no effect).
       try { chmodSync(this.storePath, 0o600); } catch { /* ignore on Windows */ }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.warn("Failed to persist scheduled emails", "Scheduler", err);
     }
   }

@@ -81,7 +81,7 @@ export class SMTPService {
             checkServerIdentity: () => undefined,
           };
           logger.info(`SMTP: Using exported Bridge certificate for TLS trust (${resolvedCertPath})`, "SMTPService");
-        } catch (err) {
+        } catch (err: unknown) {
           logger.error(
             `SMTP: Failed to load Bridge cert at "${resolvedCertPath}" — TLS certificate validation DISABLED. ` +
             "Update the Bridge Certificate Path in Settings → Connection to secure this connection.",
@@ -147,7 +147,7 @@ export class SMTPService {
       await this.transporter.verify();
       logger.info("SMTP connection verified successfully", "SMTPService");
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
       logger.error("SMTP connection verification failed", "SMTPService", error);
       throw error;
     }

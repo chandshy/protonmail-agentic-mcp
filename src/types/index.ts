@@ -243,5 +243,5 @@ export interface LogEntry {
   level: "debug" | "info" | "warn" | "error";
   context: string;
   message: string;
-  data?: any;
+  data?: unknown;
 }
