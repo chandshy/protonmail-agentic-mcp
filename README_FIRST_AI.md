@@ -278,6 +278,11 @@ to disk). The server polls every 60 s to send due emails.
 List all scheduled emails (pending, sent, failed, and cancelled), sorted by
 scheduled time ascending. Returns `{ emails: [...], count }`.
 
+#### `list_proton_scheduled`
+List emails natively scheduled via the Proton Mail web or mobile app. Reads the "All Scheduled"
+IMAP folder exposed by Proton Bridge. This is separate from emails queued via `schedule_email`.
+Returns `{ emails, count, folder, note? }`.
+
 #### `cancel_scheduled_email`
 Cancel a pending scheduled email before it is sent.
 
@@ -582,9 +587,11 @@ tool (`get_email_by_id` / `get_folders`).
 
 ## MCP Prompts
 
-- **`compose_reply`** — Draft a contextual reply. Requires `emailId`.
-- **`thread_summary`** — Summarise an email thread. Requires `emailId`.
-- **`find_subscriptions`** — Identify mailing list subscriptions in INBOX.
+- **`triage_inbox`** — Review unread emails, assess urgency, and suggest actions. Optional `limit` (default 20) and `focus` (sender or topic to prioritize).
+- **`compose_reply`** — Draft a contextual reply. Requires `emailId`. Optional `intent`.
+- **`daily_briefing`** — Summarize today's inbox: unread count, key senders, action items, deadline mentions. No arguments.
+- **`find_subscriptions`** — Identify mailing list subscriptions. Optional `folder` (default: INBOX).
+- **`thread_summary`** — Summarise an email thread and list open action items. Requires `emailId`.
 
 ---
 

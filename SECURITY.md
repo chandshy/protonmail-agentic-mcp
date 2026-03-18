@@ -25,7 +25,7 @@ If you discover a security vulnerability, please send an email to **chandshy@gma
 - **Credit**: You will be credited for the discovery (unless you prefer to remain anonymous)
 - **Timeline**: We aim to patch critical vulnerabilities within 7 days
 
-## Security Architecture (v2.0)
+## Security Architecture (v2.1+)
 
 The server implements a 10-layer defense-in-depth security model:
 
@@ -66,10 +66,10 @@ The server implements a 10-layer defense-in-depth security model:
 - No unknown keys allowed (defense-in-depth)
 
 ### 9. Memory Safety
-- Email cache capped at 500 entries per folder fetch (hard limit in `getEmails`)
+- Email cache capped at 500 entries AND 50 MB (dual eviction policy; whichever limit is reached first triggers FIFO eviction)
 - Analytics cache collapses concurrent fetches into a single in-flight IMAP round-trip (no stampede)
-- Rate-limiter buckets capped at 10k entries (memory safety)
-- Safe request body reader (64 KiB limit, 15s timeout)
+- Rate-limiter buckets capped at 10k entries
+- Safe request body reader (64 KiB limit, 15 s timeout)
 
 ### 10. Network Security
 - Settings UI binds to localhost only (127.0.0.1:8765)
@@ -122,6 +122,7 @@ Security patches will be released as:
 | Date       | Version | Issue                          | Severity | Status   |
 |------------|---------|--------------------------------|----------|----------|
 | 2026-03-17 | 2.0.0   | Security hardening (25 findings from 3 audit loops) | Various  | Resolved |
+| 2026-03-18 | 2.1.0+  | 48-cycle autonomous audit: input validation, type safety, injection prevention, CSRF, path traversal, rate limiting across all 48 tool handlers | Various  | Resolved |
 
 ---
 

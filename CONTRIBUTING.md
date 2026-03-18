@@ -106,7 +106,7 @@ feat: add email filtering by date range
 
 ```
 src/
-├── index.ts                    # Main MCP server (47 tools, Resources, Prompts)
+├── index.ts                    # Main MCP server (48 tools, Resources, Prompts)
 ├── settings-main.ts            # Settings UI entry point
 ├── config/
 │   ├── schema.ts               # Tool list, categories, permission types
@@ -207,7 +207,7 @@ When adding new features:
    - Add rate-limit overrides in `supervised` / `send_only` sections as appropriate
    - Verify the tool is correctly toggled by running `buildPermissions("read_only")` in a test
 6. Add tests
-7. Update README.md and README_FIRST_AI.md
+7. Update README.md, README_FIRST_AI.md, and CONTRIBUTING.md tool counts
 
 ### Adding a New Service
 

@@ -9,7 +9,7 @@
 - All catch blocks use `unknown` not `any`
 - Email cache: count cap (500) + byte cap (50 MB)
 - folderCache: 5-minute TTL via `folderCachedAt` + `clearFolderCache()` helper
-- Comprehensive input validation on all 47 MCP tool handlers
+- Comprehensive input validation on all 48 MCP tool handlers
 - All 5 MCP prompt handlers hardened against prompt injection and NaN inputs
 - CHANGELOG covers cycles 1–43 (Cycles 44–48 are code quality/coverage, not CHANGELOG-worthy)
 - Vitest coverage thresholds: statements 62%, branches 54%, functions 72%, lines 63%

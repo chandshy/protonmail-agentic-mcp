@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] — Autonomous Improvement Cycles #1–#43 (2026-03-18)
+## [Unreleased] — Autonomous Improvement Cycles #1–#48 (2026-03-18)
 
 ### Security
 
@@ -61,7 +61,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`search_emails` date cross-validation** — `dateFrom > dateTo` now returns `McpError(InvalidParams)` instead of silently returning zero results (Cycle #25)
 - **Test suite** — 854 tests pass (was 212 before Cycle #1); +642 tests added across Cycles #1–#43 covering all new validation paths, helpers, security guards, and cache byte-limit behaviour
 
-### Documentation
+### Added (Cycles #44–#48)
+
+- **`list_proton_scheduled` tool** — reads the "All Scheduled" IMAP folder exposed by Proton Bridge to list emails natively scheduled via the Proton Mail web or mobile app; distinct from MCP-scheduled emails managed by `schedule_email` (tool count raised to 48)
+- **folderCache TTL** — `getFolders()` returns cached data within a 5-minute TTL without an IMAP round-trip; `clearFolderCache()` helper resets the cache at all 5 mutation sites; 7 new tests (Cycle #44)
+- **Vitest coverage thresholds** — statement/branch/function/line floors enforced in `vitest.config.ts`; raised progressively from 45/38/50/47 through to 62/54/72/63 across Cycles #44–#48 (Cycles #44, #47, #48)
+
+### Changed (Cycles #44–#48)
+
+- **Test count: 854 → 1,021** — +167 tests added across Cycles #44–#48 covering utils (helpers, logger, tracer), analytics, scheduler, escalation, settings/security, and folder-cache TTL (Cycles #44–#48)
+- **`diagnosticErrorMessage` cast narrowed** — `error as any` replaced with `error as {code?: unknown; command?: unknown; responseCode?: unknown}` in `src/index.ts` (Cycle #45)
+- **`get_logs` `level` parameter** — added `typeof !== "string"` type guard; non-string values now return `McpError(InvalidParams)` instead of silently falling back to all levels (Cycle #46)
+- **MCP prompt handler hardening** — `triage_inbox` NaN limit guard + clamp to 1–100; `thread_summary` prompt now calls `requireNumericEmailId()` to prevent prompt injection via crafted `emailId`; `find_subscriptions` prompt now calls `validateTargetFolder()` to prevent prompt injection via crafted folder path (Cycle #46)
+- **Coverage milestones** — `helpers.ts`, `logger.ts`, `tracer.ts`: 100%/100%/100%/100%; `analytics-service.ts`: 99%/99%/98%/100%; `escalation.ts`: 89%/78%/100%/99%; `scheduler.ts`: 92%/84%/90%/99%; `settings/security.ts`: 78%/78%/85%/79% (Cycles #47–#48)
+
+### Documentation (Cycles #44–#48)
+
+- **README** — rebuilt from scratch: corrected tool count from 47 to 48, fixed binary names (`protonmail-agentic-mcp-settings` not `protonmail-mcp-settings`), added `list_proton_scheduled`, `delete_folder` to folder tools table, updated MCP SDK badge to 1.27+, updated test count badge to 1,021 (Cycle #48 docs pass)
+- **README_FIRST_AI.md** — added `triage_inbox` and `daily_briefing` to MCP Prompts section; added `list_proton_scheduled` to tool reference (Cycle #48 docs pass)
+
+### Documentation (Cycles #1–#43)
 
 - **README** — corrected tool count from 45 to 47 in tagline and Full Access preset description (Cycle #16)
 - **README MCP Prompts** — expanded from 3-item list to full 5-row table covering all registered prompts: `compose_reply`, `thread_summary`, `find_subscriptions`, `triage_inbox`, `daily_briefing` (Cycle #17)
