@@ -1,12 +1,12 @@
 {
-  "name": "protonmail-mcp-server",
+  "name": "protonmail-agentic-mcp",
   "version": "2.0.0",
-  "description": "Professional ProtonMail MCP server with 47 tools, Resources, and Prompts for agentic email management, folder operations, analytics, and Proton Bridge integration.",
+  "description": "ProtonMail Agentic MCP — 47 tools, Resources, and Prompts for agentic email management, folder operations, analytics, and Proton Bridge integration.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "protonmail-mcp-server": "dist/index.js",
-    "protonmail-mcp-settings": "dist/settings-main.js"
+    "protonmail-agentic-mcp": "dist/index.js",
+    "protonmail-agentic-mcp-settings": "dist/settings-main.js"
   },
   "scripts": {
     "build": "tsc",
@@ -50,13 +50,13 @@
     "email": "chandshy@gmail.com"
   },
   "license": "MIT",
-  "homepage": "https://github.com/chandshy/protonmail-mcp-server#readme",
+  "homepage": "https://github.com/chandshy/protonmail-agentic-mcp#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/chandshy/protonmail-mcp-server.git"
+    "url": "git+https://github.com/chandshy/protonmail-agentic-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/chandshy/protonmail-mcp-server/issues"
+    "url": "https://github.com/chandshy/protonmail-agentic-mcp/issues"
   },
   "engines": {
     "node": ">=20.0.0",

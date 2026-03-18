@@ -1,6 +1,6 @@
-# ProtonMail MCP Server
+# ProtonMail Agentic MCP
 
-[![CI](https://github.com/chandshy/protonmail-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/chandshy/protonmail-mcp-server/actions/workflows/ci.yml)
+[![CI](https://github.com/chandshy/protonmail-agentic-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/chandshy/protonmail-agentic-mcp/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
@@ -71,14 +71,14 @@ By default Bridge listens on:
 ### Option A — npm (recommended)
 
 ```bash
-npm install -g protonmail-mcp-server
+npm install -g protonmail-agentic-mcp
 ```
 
 ### Option B — From source
 
 ```bash
-git clone https://github.com/chandshy/protonmail-mcp-server.git
-cd protonmail-mcp-server
+git clone https://github.com/chandshy/protonmail-agentic-mcp.git
+cd protonmail-agentic-mcp
 npm install
 npm run build
 ```
@@ -153,7 +153,7 @@ Add this block to your Claude Desktop config file:
   "mcpServers": {
     "protonmail": {
       "command": "npx",
-      "args": ["-y", "protonmail-mcp-server"],
+      "args": ["-y", "protonmail-agentic-mcp"],
       "env": {
         "PROTONMAIL_USERNAME": "you@proton.me",
         "PROTONMAIL_PASSWORD": "your-bridge-password",
@@ -427,7 +427,7 @@ Credentials are saved to `~/.protonmail-mcp.json` with `0600` permissions (owner
 - Confirm the `mcpServers` block is valid JSON (no trailing commas, correct braces).
 - Fully restart Claude Desktop (Quit and reopen — not just a new window).
 - Check Claude Desktop's MCP logs: **Help → Show Logs**.
-- Verify the server starts manually: `npx protonmail-mcp-server` — it should output nothing and stay running.
+- Verify the server starts manually: `npx protonmail-agentic-mcp` — it should output nothing and stay running.
 
 ### Analytics show zero or incorrect data
 
@@ -440,8 +440,8 @@ Credentials are saved to `~/.protonmail-mcp.json` with `0600` permissions (owner
 ## 12. Development
 
 ```bash
-git clone https://github.com/chandshy/protonmail-mcp-server.git
-cd protonmail-mcp-server
+git clone https://github.com/chandshy/protonmail-agentic-mcp.git
+cd protonmail-agentic-mcp
 npm install
 
 npm run build          # compile TypeScript → dist/
@@ -488,4 +488,4 @@ MIT — see [LICENSE](LICENSE)
 
 *Unofficial third-party server. Not affiliated with or endorsed by Proton AG.*
 
-[GitHub](https://github.com/chandshy/protonmail-mcp-server) · [npm](https://www.npmjs.com/package/protonmail-mcp-server) · [Issues](https://github.com/chandshy/protonmail-mcp-server/issues) · [Model Context Protocol](https://modelcontextprotocol.io)
+[GitHub](https://github.com/chandshy/protonmail-agentic-mcp) · [npm](https://www.npmjs.com/package/protonmail-agentic-mcp) · [Issues](https://github.com/chandshy/protonmail-agentic-mcp/issues) · [Model Context Protocol](https://modelcontextprotocol.io)
