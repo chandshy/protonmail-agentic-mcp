@@ -18,6 +18,7 @@ import http from "http";
 import https from "https";
 import os from "os";
 import nodePath from "path";
+import { fileURLToPath } from "url";
 import { readFileSync, writeFileSync, renameSync, existsSync, statSync, openSync, readSync, closeSync } from "fs";
 import { spawn } from "child_process";
 import { Socket } from "net";
@@ -106,18 +107,23 @@ function safeConfig(cfg: ServerConfig): unknown {
   };
 }
 
+// ─── Module-relative path to package.json ─────────────────────────────────────
+// Compiled output is dist/settings/server.js; package.json is two levels up.
+const _moduleDir = nodePath.dirname(fileURLToPath(import.meta.url));
+const _pkgJsonPath = nodePath.resolve(_moduleDir, "../../package.json");
+
 // ─── Embedded HTML UI ─────────────────────────────────────────────────────────
 
 function buildHtml(configPath: string, csrfToken: string, runningPort = 8765): string {
   const toolsJson = JSON.stringify(ALL_TOOLS);
   const categoriesJson = JSON.stringify(TOOL_CATEGORIES);
-  const distIndexPath = JSON.stringify(nodePath.resolve(process.cwd(), "dist", "index.js"));
+  const distIndexPath = JSON.stringify(nodePath.resolve(_moduleDir, "../index.js"));
 
   // Read version + name from package.json at the project root
   let pkgVersion = "unknown";
   let pkgName = "protonmail-agentic-mcp";
   try {
-    const pkgPath = nodePath.resolve(process.cwd(), "package.json");
+    const pkgPath = _pkgJsonPath;
     const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string; name?: string };
     if (pkgJson.version) pkgVersion = pkgJson.version;
     if (pkgJson.name)    pkgName    = pkgJson.name;
@@ -3303,8 +3309,7 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
       // with the currently installed version from package.json.
       if (method === "GET" && path === "/api/check-update") {
         try {
-          const pkgPath = nodePath.resolve(process.cwd(), "package.json");
-          const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as { version?: string; name?: string };
+          const pkgJson = JSON.parse(readFileSync(_pkgJsonPath, "utf-8")) as { version?: string; name?: string };
           const current = pkgJson.version ?? "0.0.0";
           const name    = pkgJson.name    ?? "protonmail-agentic-mcp";
 
@@ -3365,8 +3370,7 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
       if (method === "POST" && path === "/api/install-update") {
         if (!requireCsrf(req, res)) return;
         try {
-          const pkgPath = nodePath.resolve(process.cwd(), "package.json");
-          const pkgJson = JSON.parse(readFileSync(pkgPath, "utf-8")) as { name?: string };
+          const pkgJson = JSON.parse(readFileSync(_pkgJsonPath, "utf-8")) as { name?: string };
           const name    = pkgJson.name ?? "protonmail-agentic-mcp";
 
           const output = await new Promise<string>((resolve, reject) => {
@@ -3561,7 +3565,7 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
             existing = {};
           }
 
-          const distIndexPath = nodePath.resolve(process.cwd(), "dist", "index.js");
+          const distIndexPath = nodePath.resolve(_moduleDir, "../index.js");
           const entry = {
             command: "node",
             args: [distIndexPath],
