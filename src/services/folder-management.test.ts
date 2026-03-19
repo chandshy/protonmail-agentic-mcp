@@ -10,6 +10,7 @@ vi.mock('imapflow', () => {
       mailboxCreate: vi.fn().mockResolvedValue(undefined),
       mailboxDelete: vi.fn().mockResolvedValue(undefined),
       mailboxRename: vi.fn().mockResolvedValue(undefined),
+      on: vi.fn(), // enables client.on('close'/'error') event handler registration
       list: vi.fn().mockResolvedValue([
         { path: 'INBOX', delimiter: '/', flags: new Set() },
         { path: 'Sent', delimiter: '/', flags: new Set() },
@@ -57,6 +58,13 @@ describe('Folder Management', () => {
         'IMAP client not connected'
       );
     });
+
+    it('should re-throw unrecognised errors from mailboxCreate (line 1710)', async () => {
+      const mockClient = (service as any).client;
+      mockClient.mailboxCreate.mockRejectedValueOnce(new Error('Quota exceeded'));
+
+      await expect(service.createFolder('MyFolder')).rejects.toThrow('Quota exceeded');
+    });
   });
 
   describe('deleteFolder', () => {
@@ -103,6 +111,14 @@ describe('Folder Management', () => {
         'IMAP client not connected'
       );
     });
+
+    it('should re-throw unrecognised errors from mailboxDelete (line 1750)', async () => {
+      const mockClient = (service as any).client;
+      const genericError = new Error('Server internal error');
+      mockClient.mailboxDelete.mockRejectedValueOnce(genericError);
+
+      await expect(service.deleteFolder('MyFolder')).rejects.toThrow('Server internal error');
+    });
   });
 
   describe('renameFolder', () => {
@@ -148,6 +164,14 @@ describe('Folder Management', () => {
       await expect(
         disconnectedService.renameFolder('Old', 'New')
       ).rejects.toThrow('IMAP client not connected');
+    });
+
+    it('should re-throw unrecognised errors from mailboxRename (line 1791)', async () => {
+      const mockClient = (service as any).client;
+      const genericError = new Error('Internal server error');
+      mockClient.mailboxRename.mockRejectedValueOnce(genericError);
+
+      await expect(service.renameFolder('OldName', 'NewName')).rejects.toThrow('Internal server error');
     });
   });
 
@@ -241,5 +265,103 @@ describe('Folder Management', () => {
       // folderCachedAt should be updated to a recent timestamp
       expect((service as any).folderCachedAt).toBeGreaterThan(Date.now() - 5000);
     });
+
+    it('should classify non-system, non-label folders as user-folder (line 520)', async () => {
+      const mockClient = (service as any).client;
+      // Override list to return a custom user folder (no specialUse, not a system path)
+      mockClient.list.mockResolvedValueOnce([
+        { path: 'MyCustomFolder', name: 'MyCustomFolder', delimiter: '/', flags: new Set(), specialUse: undefined },
+      ]);
+      mockClient.status = vi.fn().mockResolvedValue({ messages: 5, unseen: 1 });
+      (service as any).folderCachedAt = 0;
+      (service as any).folderCache.clear();
+
+      const result = await service.getFolders();
+      const customFolder = result.find(f => f.path === 'MyCustomFolder');
+      expect(customFolder).toBeDefined();
+      expect(customFolder!.folderType).toBe('user-folder');
+    });
+  });
+});
+
+// ─── validateFolderName (private) ────────────────────────────────────────────
+
+describe('validateFolderName edge cases', () => {
+  it('throws when folder name is empty (line 240)', async () => {
+    const svc = new SimpleIMAPService();
+    await svc.connect('localhost', 1143, 'user', 'pass');
+    await expect(svc.createFolder('')).rejects.toThrow('Folder name must not be empty');
+  });
+
+  it('throws when folder name exceeds 1000 chars (line 244)', async () => {
+    const svc = new SimpleIMAPService();
+    await svc.connect('localhost', 1143, 'user', 'pass');
+    await expect(svc.createFolder('a'.repeat(1001))).rejects.toThrow('Folder name is too long');
+  });
+});
+
+// ─── connect() TLS / event-handler paths ─────────────────────────────────────
+
+describe('SimpleIMAPService.connect() paths', () => {
+  it('uses full TLS validation for non-localhost hosts (line 353)', async () => {
+    const svc = new SimpleIMAPService();
+    // Connecting to a non-localhost host should NOT disable cert validation
+    await svc.connect('mail.example.com', 993, 'user', 'pass');
+    expect((svc as any).insecureTls).toBeFalsy();
+    expect((svc as any).isConnected).toBe(true);
+  });
+
+  it('catches and re-throws when client.connect() rejects (lines 391-393)', async () => {
+    const { ImapFlow } = await import('imapflow');
+    // Override next ImapFlow construction to return a failing connect
+    (ImapFlow as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockRejectedValue(new Error('ECONNREFUSED')),
+        on: vi.fn(),
+      };
+    });
+
+    const svc = new SimpleIMAPService();
+    await expect(svc.connect('localhost', 1143, 'user', 'pass')).rejects.toThrow('ECONNREFUSED');
+    expect((svc as any).isConnected).toBe(false);
+  });
+
+  it("fires 'close' event handler to set isConnected=false (lines 376-377)", async () => {
+    const { ImapFlow } = await import('imapflow');
+    const registeredHandlers: Record<string, Function> = {};
+    (ImapFlow as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn((event: string, handler: Function) => { registeredHandlers[event] = handler; }),
+      };
+    });
+
+    const svc = new SimpleIMAPService();
+    await svc.connect('localhost', 1143, 'user', 'pass');
+    expect((svc as any).isConnected).toBe(true);
+
+    // Simulate IMAP 'close' event
+    registeredHandlers['close']();
+    expect((svc as any).isConnected).toBe(false);
+  });
+
+  it("fires 'error' event handler to set isConnected=false (lines 381-382)", async () => {
+    const { ImapFlow } = await import('imapflow');
+    const registeredHandlers: Record<string, Function> = {};
+    (ImapFlow as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        on: vi.fn((event: string, handler: Function) => { registeredHandlers[event] = handler; }),
+      };
+    });
+
+    const svc = new SimpleIMAPService();
+    await svc.connect('localhost', 1143, 'user', 'pass');
+
+    // Simulate IMAP 'error' event
+    registeredHandlers['error'](new Error('network error'));
+    expect((svc as any).isConnected).toBe(false);
   });
 });

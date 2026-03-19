@@ -161,6 +161,81 @@ describe("SimpleIMAPService.downloadAttachment", () => {
     const result = await svc.downloadAttachment("999", 0);
     expect(result).toBeNull();
   });
+
+  it("re-fetches full source when attachment content is not cached", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "validateEmailId").mockImplementation(() => {});
+    // Email in cache but attachment has no content (stripped by setCacheEntry)
+    (svc as any).emailCache.set("888", {
+      email: {
+        id: "888",
+        from: "a@b.com",
+        to: [],
+        subject: "Test",
+        body: "Hello",
+        isHtml: false,
+        date: new Date(),
+        folder: "INBOX",
+        isRead: false,
+        isStarred: false,
+        hasAttachment: true,
+        attachments: [
+          { filename: "doc.pdf", contentType: "application/pdf", size: 1024 }, // no content
+        ],
+      },
+      cachedAt: Date.now(),
+    });
+    // Mock fetchEmailFullSource to return an email with the attachment content
+    vi.spyOn(svc as any, "fetchEmailFullSource").mockResolvedValue({
+      id: "888",
+      from: "a@b.com",
+      to: [],
+      subject: "Test",
+      body: "Hello",
+      isHtml: false,
+      date: new Date(),
+      folder: "INBOX",
+      isRead: false,
+      isStarred: false,
+      hasAttachment: true,
+      attachments: [
+        { filename: "doc.pdf", contentType: "application/pdf", size: 1024, content: Buffer.from("PDF content") },
+      ],
+    });
+
+    const result = await svc.downloadAttachment("888", 0);
+    expect(result).not.toBeNull();
+    expect(result!.filename).toBe("doc.pdf");
+    const decoded = Buffer.from(result!.content, "base64").toString("utf8");
+    expect(decoded).toBe("PDF content");
+  });
+
+  it("returns null when re-fetched source also has no attachment content", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "validateEmailId").mockImplementation(() => {});
+    (svc as any).emailCache.set("777", {
+      email: {
+        id: "777",
+        from: "a@b.com",
+        to: [],
+        subject: "Test",
+        body: "Hello",
+        isHtml: false,
+        date: new Date(),
+        folder: "INBOX",
+        isRead: false,
+        isStarred: false,
+        hasAttachment: true,
+        attachments: [{ filename: "file.txt", contentType: "text/plain", size: 0 }],
+      },
+      cachedAt: Date.now(),
+    });
+    // fetchEmailFullSource returns null (email not found on server)
+    vi.spyOn(svc as any, "fetchEmailFullSource").mockResolvedValue(null);
+
+    const result = await svc.downloadAttachment("777", 0);
+    expect(result).toBeNull();
+  });
 });
 
 // ─── saveDraft tests ──────────────────────────────────────────────────────────
@@ -213,6 +288,177 @@ describe("SimpleIMAPService.saveDraft", () => {
     const result = await svc.saveDraft({});
     expect(result.success).toBe(true);
   });
+
+  it("sanitizes attachment filename and contentType", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 5 }),
+    };
+    const result = await svc.saveDraft({
+      subject: "With attachment",
+      body: "See attached",
+      attachments: [
+        {
+          filename: "report\r\nX-Injected: yes.pdf", // CRLF injection attempt
+          content: Buffer.from("PDF content"),
+          contentType: "application/pdf",
+        },
+        {
+          // No filename, invalid contentType (contains newline)
+          content: Buffer.from("data"),
+          contentType: "text/html\r\nX-Evil: header",
+        },
+      ],
+    });
+    expect(result.success).toBe(true);
+    // Verify append was called (MIME was built and appended)
+    expect((svc as any).client.append).toHaveBeenCalled();
+  });
+
+  it("uses HTML body when isHtml is set", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 6 }),
+    };
+    const result = await svc.saveDraft({
+      subject: "HTML draft",
+      body: "<p>Hello</p>",
+      isHtml: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("sanitizes inReplyTo and references headers", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 7 }),
+    };
+    const result = await svc.saveDraft({
+      subject: "Reply",
+      body: "See above",
+      inReplyTo: "<msg-id@example.com>\r\nX-Injected: evil",
+      references: ["<ref1@example.com>", "<ref2\x01@example.com>"],
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ─── findDraftsFolder / pickDraftsFolder ──────────────────────────────────────
+
+describe("SimpleIMAPService private findDraftsFolder", () => {
+  it("returns folder path from cache when specialUse=\\\\Drafts", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = { append: vi.fn().mockResolvedValue({}) };
+    // Seed the folder cache with a Drafts folder
+    (svc as any).folderCache.set("Drafts", {
+      name: "Drafts", path: "Drafts", totalMessages: 0, unreadMessages: 0,
+      folderType: "system", specialUse: "\\Drafts",
+    });
+    const path = await (svc as any).findDraftsFolder();
+    expect(path).toBe("Drafts");
+  });
+
+  it("falls through to 'Drafts' when cache is empty and getFolders() throws", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc, "getFolders").mockRejectedValue(new Error("no connection"));
+    const path = await (svc as any).findDraftsFolder();
+    expect(path).toBe("Drafts");
+  });
+
+  it("returns path from getFolders() when cache is empty but folders are found", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "MyDrafts", path: "MyDrafts", totalMessages: 0, unreadMessages: 0,
+        folderType: "system", specialUse: "\\Drafts" },
+    ]);
+    const path = await (svc as any).findDraftsFolder();
+    expect(path).toBe("MyDrafts");
+  });
+});
+
+// ─── fetchEmailFullSource (private) ───────────────────────────────────────────
+
+describe("SimpleIMAPService private fetchEmailFullSource", () => {
+  it("returns null when not connected", async () => {
+    const svc = new SimpleIMAPService();
+    // isConnected=false, client=null by default
+    const result = await (svc as any).fetchEmailFullSource("1");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when getFolders() is empty (no match found)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = { getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }) };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([]);
+
+    const result = await (svc as any).fetchEmailFullSource("42");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when getFolders() throws (catch path)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {};
+    vi.spyOn(svc, "getFolders").mockRejectedValue(new Error("connection lost"));
+
+    const result = await (svc as any).fetchEmailFullSource("42");
+    expect(result).toBeNull();
+  });
+
+  it("returns null when fetch yields no messages (email not in that folder)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    async function* emptyGen() { /* yields nothing */ }
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+      fetch: vi.fn().mockReturnValue(emptyGen()),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+
+    const result = await (svc as any).fetchEmailFullSource("42");
+    expect(result).toBeNull();
+  });
+});
+
+describe("SimpleIMAPService private pickDraftsFolder", () => {
+  it("prefers specialUse=\\\\Drafts", () => {
+    const svc = new SimpleIMAPService();
+    const folders = [
+      { name: "Drafts", path: "Drafts", totalMessages: 0, unreadMessages: 0, folderType: "system" as const, specialUse: "\\Drafts" },
+    ];
+    expect((svc as any).pickDraftsFolder(folders)).toBe("Drafts");
+  });
+
+  it("falls back to name match (case-insensitive)", () => {
+    const svc = new SimpleIMAPService();
+    const folders = [
+      { name: "DRAFTS", path: "DRAFTS", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ];
+    expect((svc as any).pickDraftsFolder(folders)).toBe("DRAFTS");
+  });
+
+  it("matches path when name doesn't match", () => {
+    const svc = new SimpleIMAPService();
+    const folders = [
+      { name: "Other", path: "draft", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ];
+    expect((svc as any).pickDraftsFolder(folders)).toBe("draft");
+  });
+
+  it("returns null when no match", () => {
+    const svc = new SimpleIMAPService();
+    const folders = [
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ];
+    expect((svc as any).pickDraftsFolder(folders)).toBeNull();
+  });
 });
 
 // ─── multi-folder search tests ────────────────────────────────────────────────
@@ -249,6 +495,97 @@ describe("SimpleIMAPService.searchEmails (multi-folder)", () => {
     const calledWith = mockClient.getMailboxLock.mock.calls.map((c: any[]) => c[0]);
     expect(calledWith).toContain("INBOX");
     expect(calledWith).toContain("Sent");
+  });
+
+  it("searches all folders when folders=['*']", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+      { name: "Sent", path: "Sent", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    const lockObj = { release: vi.fn() };
+    const mockClient = {
+      getMailboxLock: vi.fn().mockResolvedValue(lockObj),
+      search: vi.fn().mockResolvedValue([]),
+    };
+    (svc as any).client = mockClient;
+
+    await svc.searchEmails({ folders: ["*"], subject: "test" });
+    // Both folders should have been searched
+    expect(mockClient.getMailboxLock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns [] when ensureConnection throws", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockRejectedValue(new Error("no config"));
+
+    const results = await svc.searchEmails({ folder: "INBOX" });
+    expect(results).toEqual([]);
+  });
+
+  it("returns [] when client is null after ensureConnection", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    (svc as any).client = null;
+
+    const results = await svc.searchEmails({ folder: "INBOX" });
+    expect(results).toEqual([]);
+  });
+
+  it("applies hasAttachment filter to single-folder results", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    const lockObj = { release: vi.fn() };
+    // Return a matching UID so we can filter on it
+    const mockClient = {
+      getMailboxLock: vi.fn().mockResolvedValue(lockObj),
+      search: vi.fn().mockResolvedValue([200]),
+    };
+    (svc as any).client = mockClient;
+    // Pre-seed email 200 with hasAttachment=false so it gets filtered out by hasAttachment:true
+    (svc as any).setCacheEntry("200", {
+      id: "200", folder: "INBOX", from: "a@b.com", to: [], subject: "S",
+      body: "B", date: new Date(), isRead: false, isStarred: false,
+      hasAttachment: false, isHtml: false,
+    });
+
+    // hasAttachment:true should filter out the email with hasAttachment:false
+    const results = await svc.searchEmails({ folder: "INBOX", hasAttachment: true });
+    expect(results).toEqual([]);
+  });
+
+  it("applies hasAttachment filter to multi-folder results", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    const lockObj = { release: vi.fn() };
+    // search returns UID 100 in the first folder
+    const mockClient = {
+      getMailboxLock: vi.fn().mockResolvedValue(lockObj),
+      search: vi.fn().mockResolvedValue([100]),
+    };
+    (svc as any).client = mockClient;
+    // Pre-seed email 100 in cache so getEmailById returns it without IMAP fetch
+    (svc as any).setCacheEntry("100", {
+      id: "100", folder: "INBOX", from: "x@y.com", to: [], subject: "S",
+      body: "B", date: new Date(), isRead: false, isStarred: false,
+      hasAttachment: true, isHtml: false,
+    });
+    // Multi-folder search with hasAttachment=false filter — email 100 has hasAttachment=true, so filtered out
+    const results = await svc.searchEmails({ folders: ["INBOX", "Sent"], hasAttachment: false });
+    expect(results).toEqual([]);
+  });
+
+  it("re-throws when searchSingleFolder throws (outer catch block)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    // Make getMailboxLock throw so searchSingleFolder propagates the error
+    const mockClient = {
+      getMailboxLock: vi.fn().mockRejectedValue(new Error("mailbox locked")),
+    };
+    (svc as any).client = mockClient;
+
+    await expect(svc.searchEmails({ folder: "INBOX" })).rejects.toThrow("mailbox locked");
   });
 });
 

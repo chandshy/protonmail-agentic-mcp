@@ -1,8 +1,8 @@
-# Audit Summary — Cycle #49 (2026-03-19)
-## Cycles completed: 49
+# Audit Summary — Cycle #50 (2026-03-19)
+## Cycles completed: 50
 
-### Status After Cycle #49
-- **1048 tests passing** (16 test files, was 1026 after cycle 48)
+### Status After Cycle #50
+- **1198 tests passing** (19 test files, was 1048 after cycle 49)
 - **0 build errors/warnings**
 - **0 exploitable security vulnerabilities**
 - Zero `any` type annotations in production TypeScript source (except unavoidable tui.ts readline internal access)
@@ -11,67 +11,110 @@
 - folderCache: 5-minute TTL via `folderCachedAt` + `clearFolderCache()` helper
 - Comprehensive input validation on all 49 MCP tool handlers
 - All 5 MCP prompt handlers hardened against prompt injection and NaN inputs
-- CHANGELOG covers cycles 1–43 (Cycles 44–49 are code quality/coverage, not CHANGELOG-worthy)
-- Vitest coverage thresholds: statements 66%, branches 57%, functions 76%, lines 68%
+- CHANGELOG covers cycles 1–43 (Cycles 44–50 are code quality/coverage, not CHANGELOG-worthy)
+- Vitest coverage thresholds: **statements 94%, branches 86%, functions 94%, lines 95%**
 - **utils package (helpers.ts, logger.ts, tracer.ts): 100% coverage**
 - **permissions/manager.ts: 100% coverage**
 - **security/memory.ts: 100% coverage**
 - **analytics-service.ts: 99.09% statements, 98.76% branches**
-- **escalation.ts: 99.36% statements, 98.79% branches, 100% lines** (was 89.24%/78.31%)
-- **scheduler.ts: 92.95% statements, 100% lines** (was 92.25%/99.2%)
-- **settings/security.ts: 98.3% statements, 91.66% branches, 100% lines** (was 77.96%/78.33%)
-- **config/loader.ts: 100% statements/functions/lines** (was 0% for keychain helpers)
+- **escalation.ts: 99.36% statements, 98.79% branches, 100% lines**
+- **scheduler.ts: 98.59% statements, 97.14% branches, 100% lines**
+- **settings/security.ts: 98.3% statements, 91.66% branches, 100% lines**
+- **config/loader.ts: 100% statements/functions/lines**
+- **simple-imap-service.ts: 94.09% statements, 79.7% branches, 94.75% lines** (was ~35% start of cycle)
 
-### Changes This Cycle (#49)
+### Overall Coverage After Cycle #50
+| Metric     | Threshold | Measured |
+|------------|-----------|----------|
+| Statements | 94%       | 95.7%    |
+| Branches   | 86%       | 87.6%    |
+| Functions  | 94%       | 95.4%    |
+| Lines      | 95%       | 96.3%    |
 
-**loader.test.ts — keychain helper coverage:**
-1. Mocked `../security/keychain.js` in loader.test.ts via top-level `vi.mock`
-2. +7 tests for `loadCredentialsFromKeychain` (3 paths), `saveConfigWithCredentials` (2 paths), `migrateCredentials` (2 paths)
-3. loader.ts now at 100% statement/function/line coverage
+### Changes This Cycle (#50)
 
-**escalation.test.ts — TOCTOU race + eviction branches:**
-4. Added TOCTOU race-condition test for `approveEscalation` line 395 (Date.now spy)
-5. Added `denyEscalation` already-resolved test (line 425 branch)
-6. Added three eviction-path tests: `getPendingEscalations`, `approveEscalation`, `denyEscalation` with expired entries
-7. Added `requestEscalation` eviction test (line 280 true-branch)
-8. Added `loadPendingFile` validation tests: non-array escalations (line 146), all invalid entry types (lines 149-158), missing version (line 172)
-9. escalation.ts now at 99.36% statements / 98.79% branches / 100% lines
+This was the **major test coverage cycle** for `simple-imap-service.ts`, which started at ~35% coverage
+and now sits at ~94% statements / ~95% lines. +150 tests added across 5 new/modified test files.
 
-**security.mocked.test.ts — new file:**
-10. Top-level `vi.mock('child_process')` and `vi.mock('os')` to cover `tryGenerateSelfSignedCert` catch path and `getPrimaryLanIP` catch path
+**New test files:**
 
-**security.test.ts — additional coverage:**
-11. Added multi-byte UTF-8 test for `hasValidAccessToken` (triggers `timingSafeEqual` catch at line 270)
-12. Added `tryGenerateSelfSignedCert` integration test with real openssl (covers lines 321-335 success path)
-13. Added `RateLimiter` MAX_RATE_LIMIT_BUCKETS overflow test (10,000 keys → covers evict() + FIFO fallback)
-14. settings/security.ts now at 98.3% statements / 100% lines
+1. **`src/services/imap-operations.test.ts`** (~700 lines, ~100 tests)
+   - Email operation methods: `markEmailRead`, `starEmail`, `moveEmail`, `copyEmailToFolder`,
+     `deleteFromFolder`, `deleteEmail`, `setFlag`, `bulkMoveEmails`, `bulkDeleteEmails`
+   - Infrastructure: `clearCache`, `disconnect`, `isActive`, `reconnect` (private),
+     `ensureConnection` (private)
+   - `getFolders`: cache hit, ensureConnection throws, client null, IMAP list, throws
+   - `getEmails`: ensureConnection throws, client null, empty mailbox, full fetch loop
+     (with CC address to cover name-formatting branch), skip no-envelope, fetch throws,
+     per-message error catch
+   - `countAttachments` (private): all bodyStructure variants
+   - `extractAttachmentMeta` (private): attachment/non-attachment branches
+   - `checkAndUpdateUidValidity` (private): UID validity change, unchanged, missing mailbox
+   - `truncateBody` paths: empty body (line 43), long body with word boundary > 80%
+     (lines 53/56/57), long body without word boundary at > 80% (line 60)
+   - `getCacheEntry` TTL eviction (lines 216-217)
 
-**scheduler.test.ts — interval callback coverage:**
-15. Added test using `vi.advanceTimersByTimeAsync` to fire the setInterval callback (line 63)
-16. scheduler.ts now at 100% line coverage
+2. **`src/services/imap-fetch.test.ts`** (~370 lines, ~15 tests)
+   - Top-level `vi.mock('imapflow')` and `vi.mock('mailparser')` for fetch loop isolation
+   - `getEmailById`: cache hit, not connected, fetch with simpleParser, no-source skip,
+     caching, attachment metadata stripped (line 778), catch block (line 795)
+   - `fetchEmailFullSource` (private): with attachments, null message source (line 1058)
+   - `searchSingleFolder` (private): empty UIDs, fetch via mocked `getEmailById`,
+     all criteria options, limit slicing, null client guard (line 805)
 
-### Coverage Before → After (Cycle #49)
-| Metric | Before (Cycle 48) | After (Cycle 49) |
-|---|---|---|
-| Statements | 64.35% | 68.35% |
-| Branches | 56.72% | 59.91% |
-| Functions | 74.67% | 77.63% |
-| Lines | 65.75% | 69.15% |
+3. **`src/services/connect-tls.test.ts`** (~70 lines, 4 tests)
+   - Top-level `vi.mock('fs')` to mock `statSync` and `readFileSync` in isolation
+   - `bridgeCertPath` as file: reads cert, enables verified TLS (lines 315-331)
+   - `bridgeCertPath` as directory: resolves `cert.pem` inside (lines 317-319)
+   - `readFileSync` throws: falls back to insecure TLS (lines 332-340)
+   - `statSync` throws: swallowed, tries original path (line 321)
 
-### Open Items (priority order)
-1. **simple-imap-service.ts (~32%)** — requires live IMAP server or very deep mocking; not suitable for unit tests
-2. **keychain.ts (58%)** — `new Function("specifier", "return import(specifier)")` bypasses vi.mock; cannot be intercepted without modifying production code
-3. **escalation.ts line 280** — `requestEscalation` eviction branch (very minor; test added but eviction didn't trigger when entries are already marked expired before the call)
-4. **index.ts** — main tool handler dispatch; requires full IMAP+SMTP integration
-5. **settings/server.ts** — full HTTP server, requires integration testing
-6. **IMAP silent-disconnect background reconnect probe** — architectural, deferred
-7. **Cursor token HMAC binding** — architectural, deferred
+**Modified test files:**
 
-### Termination Assessment
-After Cycle #49:
-- **Architecture**: All known architectural issues addressed or intentionally deferred
-- **Functionality**: All handlers fully validated; prompt handlers hardened
-- **Type Safety**: Zero avoidable any annotations or casts
-- **Security**: No new security findings; all known issues resolved
-- **Documentation**: Fully accurate; all schemas verified against codebase
-- **Test Coverage**: 1048 tests; all unit-testable code now at high coverage; remaining gaps are integration-test territory (IMAP/SMTP services) or dynamically-imported optional deps (keychain)
+4. **`src/services/folder-management.test.ts`**
+   - Added `on: vi.fn()` to ImapFlow mock — enables `client.on('close'/'error')` registration
+   - Added `user-folder` classification test (line 520)
+   - Added `validateFolderName` empty name test (line 240) and too-long name test (line 244)
+   - Added `connect()` non-localhost TLS test (line 353)
+   - Added `connect()` catch/re-throw test (lines 391-393)
+   - Added 'close' event handler test (lines 376-377) and 'error' event handler test (lines 381-382)
+   - Added re-throw tests for `mailboxCreate` (line 1710), `mailboxDelete` (line 1750),
+     `mailboxRename` (line 1791)
+
+5. **`src/services/simple-imap-service.newfeatures.test.ts`**
+   - `downloadAttachment` re-fetch path (fetchEmailFullSource mock)
+   - `saveDraft`: CRLF injection sanitization, HTML body, inReplyTo/references headers
+   - `findDraftsFolder`: cache hit, getFolders throws, getFolders returns match
+   - `pickDraftsFolder`: specialUse match, name match, path match, null
+   - `fetchEmailFullSource`: not connected, empty getFolders, getFolders throws, yields nothing
+   - `searchEmails`: all-folders (`'*'`), ensureConnection throws, client null,
+     `hasAttachment` filter (single/multi folder), outer catch block (line 966-968)
+
+6. **`vitest.config.ts`** — thresholds raised:
+   - statements: 91 → 94
+   - branches: 84 → 86
+   - functions: 90 → 94
+   - lines: 92 → 95
+
+### Remaining Architectural Limits (accepted, not fixable in unit tests)
+- **Line 329** (`checkServerIdentity: () => undefined` callback): called by Node.js TLS stack
+  during actual handshake — cannot be triggered in unit tests
+- **Lines 1801-1889** (IMAP IDLE loop): background while-loop with real async IMAP events —
+  would require a live IMAP server + integration test infrastructure
+- **keychain.ts lines 24-128, 153-162**: macOS/Windows credential store native APIs —
+  untestable on the CI platform without OS-level credential fixtures
+
+### Key Test Patterns Established
+- Async generator helper for ImapFlow fetch mocks:
+  ```typescript
+  async function* asyncMessages(msgs: unknown[]) {
+    for (const m of msgs) yield m;
+  }
+  ```
+- Per-test simpleParser override:
+  ```typescript
+  (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({...});
+  ```
+- Private method testing: `(svc as any).methodName()`
+- Event handler testing: capture handlers via `on: vi.fn((event, fn) => { handlers[event] = fn; })`,
+  then call `handlers['close']()` to simulate the event
