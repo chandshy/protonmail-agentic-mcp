@@ -178,6 +178,18 @@ describe("SchedulerService", () => {
     svc2.stop();
   });
 
+  it("start() is a no-op when already running (duplicate start guard — line 57)", () => {
+    const smtp = makeSMTP();
+    const svc = new SchedulerService(smtp, storePath);
+    svc.start(); // first start — sets timer
+    svc.start(); // second start — should be a no-op (line 57: if (this.timer) return)
+    // Verify only one timer was set (stop once is enough to clear)
+    svc.stop();
+    // After stop, timer is null; starting again should work normally
+    svc.start();
+    svc.stop();
+  });
+
   it("setInterval callback fires after POLL_INTERVAL_MS and calls processDue via start()", async () => {
     const smtp = makeSMTP();
     const svc = new SchedulerService(smtp, storePath);
@@ -261,10 +273,20 @@ describe("SchedulerService", () => {
     const id = svc1.schedule(makeOptions(), futureDate(120));
     svc1.stop(); // persists the one valid item
 
-    // Now manually overwrite the file with a mix of valid + invalid records
+    // Now manually overwrite the file with a mix of valid + invalid records covering
+    // all branches of isValidRecord (lines 34-40):
     const valid = (svc1 as any).items[0];
-    const malformed = { id: "", scheduledAt: "not-a-date", status: "pending" }; // missing required fields
-    writeFileSync(storePath, JSON.stringify([valid, malformed]), "utf-8");
+    const now = new Date().toISOString();
+    const records = [
+      valid,
+      null,                                                                  // line 34: !r
+      { id: "", scheduledAt: now, createdAt: now, status: "pending", options: {} },   // line 36: !o.id
+      { id: "ok", scheduledAt: "not-a-date", createdAt: now, status: "pending", options: {} }, // line 37: isNaN(scheduledAt)
+      { id: "ok", scheduledAt: now, createdAt: "bad", status: "pending", options: {} },        // line 38: isNaN(createdAt)
+      { id: "ok", scheduledAt: now, createdAt: now, status: "unknown", options: {} },          // line 39: invalid status
+      { id: "ok", scheduledAt: now, createdAt: now, status: "pending", options: null },        // line 40: options null
+    ];
+    writeFileSync(storePath, JSON.stringify(records), "utf-8");
 
     const svc2 = new SchedulerService(smtp, storePath);
     (svc2 as any).load();
@@ -315,6 +337,46 @@ describe("SchedulerService", () => {
     const svc = new SchedulerService(smtp, badPath);
     // schedule() calls persist() internally; the error should be swallowed and warned
     expect(() => svc.schedule(makeOptions(), futureDate(120))).not.toThrow();
+  });
+
+  it("processDue() is a no-op when already processing (concurrent lock guard — line 157)", async () => {
+    let resolveSend!: () => void;
+    const sendPromise = new Promise<void>(res => { resolveSend = res; });
+    const smtp = {
+      sendEmail: vi.fn().mockReturnValue(sendPromise.then(() => ({ success: true, messageId: 'msg1' }))),
+    } as unknown as SMTPService;
+    const svc = new SchedulerService(smtp, storePath);
+    svc.schedule(makeOptions(), futureDate(120));
+    vi.advanceTimersByTime(121 * 1000);
+
+    // Start first processDue — it will await sendEmail (which is pending)
+    const firstDue = svc.processDue();
+    // While first is still running, call processDue again — should be a no-op (isProcessing = true)
+    await svc.processDue();
+    // sendEmail should only have been called once (second processDue was skipped)
+    expect(smtp.sendEmail).toHaveBeenCalledTimes(1);
+    // Now resolve and let the first call complete
+    resolveSend();
+    await firstDue;
+  });
+
+  it("processDue() handles non-Error thrown from sendEmail (String(err) branch)", async () => {
+    // Throw a non-Error value to exercise the String(err) fallback at line 192
+    const smtp = {
+      sendEmail: vi.fn().mockRejectedValue("plain string rejection"),
+    } as unknown as SMTPService;
+    const svc = new SchedulerService(smtp, storePath);
+    const id = svc.schedule(makeOptions(), futureDate(120));
+    vi.advanceTimersByTime(121 * 1000);
+
+    // Exhaust retries
+    await svc.processDue();
+    await svc.processDue();
+    await svc.processDue();
+
+    const item = svc.list().find(i => i.id === id)!;
+    expect(item.status).toBe("failed");
+    expect(item.error).toBe("plain string rejection");
   });
 
   it("processDue() handles thrown exceptions from sendEmail (catch branch)", async () => {
