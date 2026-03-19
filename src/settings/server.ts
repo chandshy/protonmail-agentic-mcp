@@ -3310,7 +3310,7 @@ export function createSettingsServer(secOpts: ServerSecurityOptions): http.Serve
       if (method === "GET" && path === "/api/check-update") {
         try {
           const pkgJson = JSON.parse(readFileSync(_pkgJsonPath, "utf-8")) as { version?: string; name?: string };
-          const current = pkgJson.version ?? "0.0.0";
+          const current = pkgJson.version ?? "unknown";
           const name    = pkgJson.name    ?? "protonmail-agentic-mcp";
 
           const latest = await new Promise<string>((resolve, reject) => {

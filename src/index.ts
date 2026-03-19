@@ -14,7 +14,7 @@ const _pkgVersion = (() => {
   try {
     const dir = nodePath.dirname(_fileURLToPath(import.meta.url));
     return (JSON.parse(readFileSync(nodePath.resolve(dir, "../package.json"), "utf-8")) as { version: string }).version;
-  } catch { return "0.0.0"; }
+  } catch { return "unknown"; }
 })();
 import { homedir } from "os";
 import { deflateSync } from "zlib";
@@ -3797,7 +3797,7 @@ async function main() {
   // Clear log file from previous run so each session starts fresh
   try { writeFileSync(getLogFilePath(), "", "utf8"); } catch { /* ignore */ }
 
-  logger.info("Starting Proton Mail MCP Server v2.0.0", "MCPServer");
+  logger.info(`Starting Proton Mail MCP Server v${_pkgVersion}`, "MCPServer");
 
   // Migrate plaintext credentials to OS keychain if available
   try {
