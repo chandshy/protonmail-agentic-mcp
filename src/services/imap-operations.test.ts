@@ -1490,6 +1490,52 @@ describe("SimpleIMAPService private reconnect", () => {
   });
 });
 
+// ─── setFlag: non-matching UID in folder scan ─────────────────────────────────
+
+describe("SimpleIMAPService.setFlag non-matching UID", () => {
+  it("yields non-matching UID in folder scan → folder not found (lines 1470, 1472 branch1)", async () => {
+    const svc = new SimpleIMAPService();
+    const emailId = "199";
+    const mockLock = makeLock();
+    // fetch yields a message with a DIFFERENT uid (not matching emailId "199")
+    async function* yieldNonMatch() { yield { uid: 999 }; }
+    const client = {
+      getMailboxLock: vi.fn().mockResolvedValue(mockLock),
+      messageFlagsAdd: vi.fn().mockResolvedValue(undefined),
+      fetch: vi.fn().mockReturnValue(yieldNonMatch()),
+    };
+    (svc as any).isConnected = true;
+    (svc as any).client = client;
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+
+    // Non-matching uid → found=false → folder never set → throws "not found"
+    await expect(svc.setFlag(emailId, "\\Answered")).rejects.toThrow("not found in any folder");
+    // lock.release() must have been called (finally block in scan)
+    expect(mockLock.release).toHaveBeenCalled();
+  });
+});
+
+// ─── bulkMoveEmails: per-email fallback with no cache entry ───────────────────
+
+describe("SimpleIMAPService.bulkMoveEmails per-email cache update", () => {
+  it("skips cache update in per-email fallback when email not in cache (line 1555 branch1)", async () => {
+    const svc = new SimpleIMAPService();
+    connectSvc(svc, {
+      messageMove: vi.fn()
+        .mockRejectedValueOnce(new Error("batch fail")) // batch fails → per-email fallback
+        .mockResolvedValueOnce(undefined),               // per-email succeeds
+    });
+    // Email "198" is NOT in cache → getCacheEntry returns undefined → if(cachedForBulkMove) is false
+
+    const results = await svc.bulkMoveEmails(["198"], "Archive");
+
+    expect(results.success).toBe(1);
+    // No crash — getCacheEntry returned undefined and if() was false (branch1)
+  });
+});
+
 // ─── ensureConnection (private) ───────────────────────────────────────────────
 
 describe("SimpleIMAPService private ensureConnection", () => {

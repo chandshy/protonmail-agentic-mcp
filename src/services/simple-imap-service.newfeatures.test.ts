@@ -388,6 +388,70 @@ describe("SimpleIMAPService.saveDraft", () => {
     expect(result.success).toBe(true);
     expect(result.uid).toBeUndefined(); // null result → uid = undefined
   });
+
+  it("uses '' as html body when isHtml=true and body is empty (line 1168 branch1)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 10 }),
+    };
+    // isHtml=true AND body='' → html: (options.body || '') evaluates the || branch
+    const result = await svc.saveDraft({
+      subject: "HTML Draft",
+      body: "",
+      isHtml: true,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("uses 'attachment' when filename is only control chars (line 1184 branch1: || 'attachment')", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 11 }),
+    };
+    // filename = "\r\n\x00" → after replace becomes "" → "" || "attachment" = "attachment"
+    const result = await svc.saveDraft({
+      subject: "Test",
+      body: "See attached",
+      attachments: [{
+        filename: "\r\n\x00",
+        content: Buffer.from("data"),
+        contentType: "application/octet-stream",
+      }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("uses undefined contentType when att.contentType is falsy (line 1189 branch1)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 12 }),
+    };
+    // contentType is undefined → rawCt = undefined → safeContentType = undefined
+    const result = await svc.saveDraft({
+      subject: "Test",
+      body: "See attached",
+      attachments: [{
+        filename: "file.dat",
+        content: Buffer.from("data"),
+        contentType: undefined as any,
+      }],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("returns String(error) when thrown value is not an Error (line 1214 branch1)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockRejectedValue("string-error"), // string, not Error instance
+    };
+    const result = await svc.saveDraft({ subject: "Test", body: "Hello" });
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("string-error"); // String("string-error")
+  });
 });
 
 // ─── findDraftsFolder / pickDraftsFolder ──────────────────────────────────────
@@ -421,6 +485,17 @@ describe("SimpleIMAPService private findDraftsFolder", () => {
     ]);
     const path = await (svc as any).findDraftsFolder();
     expect(path).toBe("MyDrafts");
+  });
+
+  it("falls through to 'Drafts' when getFolders() returns no matching folders (line 1109 branch1)", async () => {
+    const svc = new SimpleIMAPService();
+    // Return real folders that don't match drafts patterns
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+      { name: "Sent", path: "Sent", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    const path = await (svc as any).findDraftsFolder();
+    expect(path).toBe("Drafts");
   });
 });
 

@@ -659,6 +659,139 @@ describe("SimpleIMAPService private fetchEmailFullSource fallback branches", () 
   });
 });
 
+// ─── getEmailById: additional branch coverage ─────────────────────────────────
+
+describe("SimpleIMAPService.getEmailById additional branches", () => {
+  it("uses (No Subject) fallback when parsed.subject is null (line 733 branch1)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Body",
+      html: null,
+      subject: null, // → line 733: parsed.subject || '(No Subject)'
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map(),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 95, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("95");
+    expect(result).not.toBeNull();
+    expect(result!.subject).toBe("(No Subject)");
+  });
+
+  it("sets protonId when x-pm-internal-id header is a string (line 766 branch0)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Body",
+      html: null,
+      subject: "Proton Email",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map([
+        ["x-pm-internal-id", " proton-stable-id-abc "], // string → branch0 → pmId.trim()
+      ]),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 96, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("96");
+    expect(result).not.toBeNull();
+    expect(result!.protonId).toBe("proton-stable-id-abc");
+  });
+
+  it("detects PGP encrypted email (line 764: ctStr includes multipart/encrypted)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Encrypted body",
+      html: null,
+      subject: "PGP Encrypted",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map([
+        ["content-type", "multipart/encrypted; protocol=\"application/pgp-encrypted\""],
+      ]),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 97, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("97");
+    expect(result).not.toBeNull();
+    expect(result!.isEncryptedPGP).toBe(true);
+  });
+
+  it("handles undefined attachments from parser (line 773: attachments?.length ?? 0)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Body",
+      html: null,
+      subject: "No Attachments",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: undefined, // → attachments?.map() = undefined → attachments?.length undefined → ?? 0
+      headers: new Map(),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 98, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("98");
+    expect(result).not.toBeNull();
+    expect(result!.hasAttachment).toBe(false);
+    expect(result!.attachments).toBeUndefined();
+  });
+});
+
 // ─── fetchEmailFullSource: null source branch ─────────────────────────────────
 
 describe("SimpleIMAPService private fetchEmailFullSource null source", () => {
