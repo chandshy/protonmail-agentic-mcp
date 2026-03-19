@@ -649,6 +649,34 @@ describe("SimpleIMAPService private extractAttachmentMeta", () => {
     const result = (svc as any).extractAttachmentMeta({ disposition: "attachment", size: 0 });
     expect(result[0].contentType).toBe("application/octet-stream");
   });
+
+  it("does not classify multipart as attachment (line 274 branch 2)", () => {
+    const svc = new SimpleIMAPService();
+    // No disposition + type=multipart → isAttachment=false (type !== 'multipart' is false)
+    const result = (svc as any).extractAttachmentMeta({ type: "multipart", size: 100 });
+    expect(result).toEqual([]);
+  });
+
+  it("does not classify empty-type as attachment (line 274 branch 3)", () => {
+    const svc = new SimpleIMAPService();
+    // No disposition + type='' → isAttachment=false (type !== '' is false)
+    const result = (svc as any).extractAttachmentMeta({ type: "", size: 100 });
+    expect(result).toEqual([]);
+  });
+
+  it("uses 0 as size when structure.size is undefined (line 283 branch 1)", () => {
+    const svc = new SimpleIMAPService();
+    // No size field → size ?? 0 = 0
+    const result = (svc as any).extractAttachmentMeta({ disposition: "attachment", type: "application" });
+    expect(result[0].size).toBe(0);
+  });
+
+  it("returns undefined contentId when structure.id is absent (line 283 branch 1 for id)", () => {
+    const svc = new SimpleIMAPService();
+    // No id field → contentId = undefined
+    const result = (svc as any).extractAttachmentMeta({ disposition: "attachment", type: "application", size: 0 });
+    expect(result[0].contentId).toBeUndefined();
+  });
 });
 
 // ─── checkAndUpdateUidValidity (private) ──────────────────────────────────────
@@ -804,6 +832,50 @@ describe("SimpleIMAPService.getFolders", () => {
     (svc as any).client = mockClient;
 
     await expect(svc.getFolders()).rejects.toThrow("IMAP list failed");
+  });
+
+  it("uses 0 when status.messages and status.unseen are missing (lines 526-527)", async () => {
+    const svc = new SimpleIMAPService();
+    const mockClient = {
+      list: vi.fn().mockResolvedValue([
+        { path: "INBOX", name: "INBOX", delimiter: "/", flags: new Set(), specialUse: undefined },
+      ]),
+      status: vi.fn().mockResolvedValue({}), // no messages/unseen keys → fallback to 0
+    };
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    (svc as any).client = mockClient;
+
+    const folders = await svc.getFolders();
+    expect(folders[0].totalMessages).toBe(0);
+    expect(folders[0].unreadMessages).toBe(0);
+  });
+});
+
+// ─── estimateCacheBytes (private static) ──────────────────────────────────────
+
+describe("SimpleIMAPService.estimateCacheBytes null fallbacks (lines 96-98)", () => {
+  it("falls back to 0 when body/subject/from are undefined", () => {
+    const email: EmailMessage = {
+      id: "x",
+      folder: "INBOX",
+      from: undefined as any,   // triggers ?? 0 at line 98
+      to: [],
+      subject: undefined as any, // triggers ?? 0 at line 97
+      body: undefined as any,    // triggers ?? 0 at line 96
+      date: new Date(),
+      isRead: false,
+      isStarred: false,
+      hasAttachment: false,
+      isHtml: false,
+    };
+
+    // estimateCacheBytes is a private static method — call it via setCacheEntry
+    const svc = new SimpleIMAPService();
+    // Setting a cache entry exercises estimateCacheBytes internally
+    (svc as any).setCacheEntry("x", email);
+    expect((svc as any).emailCache.has("x")).toBe(true);
+    // Byte estimate should be 200 (fixed overhead) when all string fields are undefined
+    expect((svc as any).cacheByteEstimate).toBe(200);
   });
 });
 
@@ -979,6 +1051,21 @@ describe("SimpleIMAPService.getEmails", () => {
     expect(emails).toEqual([]);
   });
 
+  it("uses default limit/offset when called with undefined (lines 557-558 binary-expr fallback)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "validateFolderName").mockImplementation(() => {});
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      mailbox: { exists: 0 },
+    };
+
+    // Passing undefined explicitly triggers the ?? 50 and ?? 0 branches
+    const emails = await (svc as any).getEmails("INBOX", undefined, undefined);
+    expect(emails).toEqual([]);
+  });
+
   it("uses empty bodyPreview when bodyParts has no '1' key (line 43 truncateBody)", async () => {
     const svc = new SimpleIMAPService();
     vi.spyOn(svc as any, "validateFolderName").mockImplementation(() => {});
@@ -1045,6 +1132,111 @@ describe("SimpleIMAPService.getEmails", () => {
     expect(emails).toHaveLength(1);
     expect(emails[0].bodyPreview).toMatch(/\.\.\.$/); // ends with ellipsis
     expect(emails[0].bodyPreview!.length).toBeLessThan(longBody.length);
+  });
+
+  it("formats addresses with name (to) and without name (cc) — branch coverage (lines 618-626)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "validateFolderName").mockImplementation(() => {});
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+    vi.spyOn(svc as any, "countAttachments").mockReturnValue(0);
+
+    const mockMsg = {
+      uid: 210,
+      envelope: {
+        date: new Date("2024-01-01"),
+        subject: "Address Test",
+        from: [{ name: "Alice" }],          // name but no address → address ?? '' = ''
+        to: [{ name: "Bob", address: "bob@example.com" }], // with name → covers cond-expr branch 0
+        cc: [{ address: "carol@example.com" }],  // no name → covers cond-expr branch 1 for cc
+      },
+      flags: new Set(),
+      bodyParts: new Map([["1", Buffer.from("body")]]),
+      bodyStructure: {},
+    };
+
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      mailbox: { exists: 1 },
+      fetch: vi.fn().mockReturnValue(asyncMessages([mockMsg])),
+    };
+
+    const emails = await svc.getEmails("INBOX");
+    expect(emails).toHaveLength(1);
+    expect(emails[0].from).toBe("Alice <>"); // name with empty address fallback
+    expect(emails[0].to).toEqual(["Bob <bob@example.com>"]); // with name
+    expect(emails[0].cc).toEqual(["carol@example.com"]); // no name
+  });
+
+  it("handles null/undefined envelope fields with fallback values (lines 616,639,643,645)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "validateFolderName").mockImplementation(() => {});
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+    vi.spyOn(svc as any, "countAttachments").mockReturnValue(0);
+
+    const mockMsg = {
+      uid: 203,
+      envelope: {
+        date: null,    // → fallback new Date()
+        subject: null, // → '(No Subject)'
+        from: null,    // → from = ''
+        to: null,      // → to = []
+        cc: null,      // → cc = []
+      },
+      flags: undefined, // → isRead=false, isStarred=false
+      bodyParts: new Map([["1", Buffer.from("body")]]),
+      bodyStructure: {},
+    };
+
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      mailbox: { exists: 1 },
+      fetch: vi.fn().mockReturnValue(asyncMessages([mockMsg])),
+    };
+
+    const emails = await svc.getEmails("INBOX");
+    expect(emails).toHaveLength(1);
+    expect(emails[0].subject).toBe("(No Subject)");
+    expect(emails[0].from).toBe("");
+    expect(emails[0].to).toEqual([]);
+    expect(emails[0].isRead).toBe(false);
+  });
+
+  it("calls extractAttachmentMeta when countAttachments > 0 (line 630 branch 0)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "validateFolderName").mockImplementation(() => {});
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+    vi.spyOn(svc as any, "countAttachments").mockReturnValue(2); // > 0 → extractAttachmentMeta called
+    vi.spyOn(svc as any, "extractAttachmentMeta").mockReturnValue([
+      { filename: "doc.pdf", contentType: "application/pdf", size: 1024, contentId: undefined },
+    ]);
+
+    const mockMsg = {
+      uid: 204,
+      envelope: {
+        date: new Date("2024-01-01"),
+        subject: "Has Attachments",
+        from: [{ address: "a@b.com" }],
+        to: [],
+        cc: [],
+      },
+      flags: new Set(),
+      bodyParts: new Map([["1", Buffer.from("body")]]),
+      bodyStructure: {},
+    };
+
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      mailbox: { exists: 1 },
+      fetch: vi.fn().mockReturnValue(asyncMessages([mockMsg])),
+    };
+
+    const emails = await svc.getEmails("INBOX");
+    expect(emails).toHaveLength(1);
+    expect(emails[0].hasAttachment).toBe(true);
+    expect(emails[0].attachments).toHaveLength(1);
   });
 
   it("truncates long body at hard limit when no word boundary after 80% (line 60)", async () => {

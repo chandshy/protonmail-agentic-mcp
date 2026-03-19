@@ -195,6 +195,210 @@ describe("SimpleIMAPService.getEmailById (fetch loop)", () => {
 
     await expect(svc.getEmailById("42")).rejects.toThrow("IMAP lock error");
   });
+
+  it("uses false fallback for isAnswered/isForwarded when flags is undefined (lines 760-761)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Body",
+      html: null,
+      subject: "No flags",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map(),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 76, source: Buffer.from("raw"), flags: undefined }; // no flags
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("76");
+    expect(result).not.toBeNull();
+    expect(result!.isAnswered).toBe(false); // flags?.has(...) ?? false → false
+    expect(result!.isForwarded).toBe(false);
+    expect(result!.isRead).toBe(false);
+    expect(result!.isStarred).toBe(false);
+  });
+
+  it("covers getEmailById branches: cc with text, date fallback, filename fallback, headers null (lines 732-766)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Body",
+      html: null,
+      subject: "Branch Coverage",
+      date: null,                   // → line 737: parsed.date || new Date()
+      from: null,                   // → line 730: from = ''
+      to: null,                     // → line 731: to = []
+      cc: { text: "cc@example.com" }, // → line 732: cc with text → [text]
+      attachments: [
+        { filename: null, contentType: "application/pdf", size: 512, content: Buffer.from("x"), cid: undefined },
+        // filename=null → line 743: att.filename || 'unnamed'
+      ],
+      headers: null,                // → line 749: headers ? ... : undefined
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 73, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("73");
+    expect(result).not.toBeNull();
+    expect(result!.cc).toEqual(["cc@example.com"]); // cc with text
+    expect(result!.from).toBe(""); // from null
+    expect(result!.date).toBeInstanceOf(Date); // date fallback
+    expect(result!.attachments![0].filename).toBe("unnamed"); // filename fallback
+    expect(result!.headers).toBeUndefined(); // headers null
+  });
+
+  it("handles content-type as string for PGP detection (line 723 branch 0)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Signed body",
+      html: null,
+      subject: "PGP Signed",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map([
+        ["content-type", "multipart/signed; protocol=\"application/pgp-signature\""],
+        // string value → covers line 723 branch 0 (typeof contentType === 'string')
+      ]),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 74, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("74");
+    expect(result).not.toBeNull();
+    expect(result!.isSignedPGP).toBe(true); // ctStr is a string with the right content
+  });
+
+  it("handles headers array values (line 753 branch 0: Array.isArray(v))", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: "Body",
+      html: null,
+      subject: "Headers Test",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map([
+        ["received", ["from server1", "from server2"]], // array → join(', ')
+      ]),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 75, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("75");
+    expect(result).not.toBeNull();
+    expect(result!.headers?.["received"]).toBe("from server1, from server2"); // joined
+  });
+
+  it("uses html body when parsed.text is null (line 719 branch 1)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: null,
+      html: "<b>Hello HTML</b>",
+      subject: "HTML Email",
+      date: new Date("2024-01-15"),
+      from: { text: "sender@example.com" },
+      to: { text: "recipient@example.com" },
+      cc: null,
+      attachments: [],
+      headers: new Map(),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 71, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("71");
+    expect(result).not.toBeNull();
+    expect(result!.body).toBe("<b>Hello HTML</b>");
+    expect(result!.isHtml).toBe(true);
+  });
+
+  it("uses empty string body when both text and html are null (line 719 branch 2)", async () => {
+    const { simpleParser } = await import("mailparser");
+    (simpleParser as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      text: null,
+      html: null,
+      subject: "Empty Body",
+      date: new Date("2024-01-15"),
+      from: null,
+      to: null,
+      cc: null,
+      attachments: [],
+      headers: new Map(),
+    });
+
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    const mockMessage = { uid: 72, source: Buffer.from("raw"), flags: new Set() };
+    (svc as any).client = {
+      getMailboxLock: vi.fn().mockResolvedValue(makeLock()),
+      fetch: vi.fn().mockReturnValue(asyncYield(mockMessage)),
+    };
+    vi.spyOn(svc, "getFolders").mockResolvedValue([
+      { name: "INBOX", path: "INBOX", totalMessages: 0, unreadMessages: 0, folderType: "system" as const },
+    ]);
+    vi.spyOn(svc as any, "checkAndUpdateUidValidity").mockImplementation(() => {});
+
+    const result = await svc.getEmailById("72");
+    expect(result).not.toBeNull();
+    expect(result!.body).toBe(""); // both text and html null → ''
+    expect(result!.from).toBe(""); // from null → ''
+    expect(result!.to).toEqual([]); // to null → []
+  });
 });
 
 // ─── fetchEmailFullSource (private) with real simpleParser mock ───────────────

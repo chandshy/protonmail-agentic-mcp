@@ -344,6 +344,50 @@ describe("SimpleIMAPService.saveDraft", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("handles to as array, cc as string, bcc as array (lines 1154-1160 branch coverage)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 8 }),
+    };
+    const result = await svc.saveDraft({
+      to: ["alice@example.com", "bob@example.com"],  // array → line 1154 branch 0
+      cc: "carol@example.com",                        // string → line 1157 branch 1
+      bcc: ["dan@example.com"],                        // array → line 1160 branch 0
+      subject: "Multi-address draft",
+      body: "Hello all",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("handles to as string, cc as array, bcc as string (more address-format coverage)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue({ uid: 9 }),
+    };
+    const result = await svc.saveDraft({
+      to: "alice@example.com",               // string → existing coverage
+      cc: ["cc1@example.com", "cc2@example.com"], // array → line 1157 branch 0
+      bcc: "bcc@example.com",                // string → line 1160 branch 1
+      subject: "Draft",
+      body: "",   // empty body → line 1168: options.body || '' = ''
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("returns uid undefined when append result is not an object (line 1209 branch 1)", async () => {
+    const svc = new SimpleIMAPService();
+    (svc as any).isConnected = true;
+    (svc as any).client = {
+      append: vi.fn().mockResolvedValue(null), // result is null → typeof result !== 'object' is... actually null IS typeof object
+    };
+    // Actually: null → typeof null === 'object' but result && ... is false (null is falsy)
+    const result = await svc.saveDraft({ subject: "Test", body: "Body" });
+    expect(result.success).toBe(true);
+    expect(result.uid).toBeUndefined(); // null result → uid = undefined
+  });
 });
 
 // ─── findDraftsFolder / pickDraftsFolder ──────────────────────────────────────
@@ -586,6 +630,50 @@ describe("SimpleIMAPService.searchEmails (multi-folder)", () => {
     (svc as any).client = mockClient;
 
     await expect(svc.searchEmails({ folder: "INBOX" })).rejects.toThrow("mailbox locked");
+  });
+
+  it("skips invalid dateFrom when date string is unparseable (line 821 branch 1)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    const mockClient = {
+      getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+      search: vi.fn().mockResolvedValue([]),
+    };
+    (svc as any).client = mockClient;
+
+    // 'not-a-date' parses to NaN → dateFrom should be ignored (line 821 branch 1)
+    const results = await svc.searchEmails({ folder: "INBOX", dateFrom: "not-a-date" });
+    expect(results).toEqual([]);
+    // searchCriteria.since should NOT be set
+    const criteria = mockClient.search.mock.calls[0][0];
+    expect(criteria.since).toBeUndefined();
+  });
+
+  it("uses INBOX default when options.folder is not specified (line 926 branch 1)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    const mockClient = {
+      getMailboxLock: vi.fn().mockResolvedValue({ release: vi.fn() }),
+      search: vi.fn().mockResolvedValue([]),
+    };
+    (svc as any).client = mockClient;
+
+    // No folder specified → defaults to 'INBOX'
+    await svc.searchEmails({ subject: "test" });
+    expect(mockClient.getMailboxLock).toHaveBeenCalledWith("INBOX");
+  });
+
+  it("continues when one folder search is rejected — handles Promise.allSettled rejected (line 953)", async () => {
+    const svc = new SimpleIMAPService();
+    vi.spyOn(svc as any, "ensureConnection").mockResolvedValue(undefined);
+    // searchSingleFolder for one folder throws; the other resolves — allSettled handles both
+    vi.spyOn(svc as any, "searchSingleFolder")
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("folder unavailable"));
+    (svc as any).client = {};
+
+    const results = await svc.searchEmails({ folders: ["INBOX", "Sent"] });
+    expect(results).toEqual([]); // fulfilled result merged; rejected ignored
   });
 });
 

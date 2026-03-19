@@ -346,6 +346,37 @@ describe('SimpleIMAPService.connect() paths', () => {
     expect((svc as any).isConnected).toBe(false);
   });
 
+  it("uses explicit secure=true flag (line 358 branch 0: secure !== undefined)", async () => {
+    const svc = new SimpleIMAPService();
+    // Passing secure=true explicitly — should use that value, not derive from isLocalhost
+    await svc.connect("localhost", 1143, "user", "pass", undefined, true);
+    expect((svc as any).isConnected).toBe(true);
+    // connectionConfig should record the explicit value
+    expect((svc as any).connectionConfig.secure).toBe(true);
+  });
+
+  it("connects without credentials (line 364 branch 1: no username/password)", async () => {
+    const svc = new SimpleIMAPService();
+    // Passing no username/password — auth should be undefined
+    await svc.connect("mail.example.com", 993);
+    expect((svc as any).isConnected).toBe(true);
+  });
+
+  it("skips event handler registration when client has no 'on' method (line 374 branch 1)", async () => {
+    const { ImapFlow } = await import("imapflow");
+    (ImapFlow as ReturnType<typeof vi.fn>).mockImplementationOnce(function () {
+      return {
+        connect: vi.fn().mockResolvedValue(undefined),
+        logout: vi.fn().mockResolvedValue(undefined),
+        // No 'on' method → typeof this.client.on !== 'function' → branch 1 (false)
+      };
+    });
+
+    const svc = new SimpleIMAPService();
+    await svc.connect("localhost", 1143, "user", "pass");
+    expect((svc as any).isConnected).toBe(true);
+  });
+
   it("fires 'error' event handler to set isConnected=false (lines 381-382)", async () => {
     const { ImapFlow } = await import('imapflow');
     const registeredHandlers: Record<string, Function> = {};
