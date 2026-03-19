@@ -6,7 +6,7 @@
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
 [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-1.27+-green.svg)](https://github.com/modelcontextprotocol/sdk)
-[![Tests](https://img.shields.io/badge/tests-1%2C021%20passing-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-1%2C026%20passing-brightgreen.svg)](#development)
 
 **Read, compose, and manage your encrypted ProtonMail inbox from any AI assistant — with human-controlled permissions.**
 
@@ -23,7 +23,7 @@ Your emails are decrypted on your own machine by Proton Bridge. This server neve
 ## Key Features
 
 - **51 tools** covering reading, search, analytics, sending, scheduling, drafts, folders, labels, bulk operations, and Bridge/server lifecycle control (49 permission-managed + 2 always-available escalation tools)
-- **4 permission presets** — read-only by default; write access requires explicit opt-in
+- **5 permission presets** — read-only by default; write access requires explicit opt-in
 - **Human-gated escalation** — agents request elevated permissions, you approve via browser UI or terminal; the agent cannot approve its own requests
 - **Browser-based settings UI** at `localhost:8765` — auto-starts with the daemon; setup wizard, live connection test, per-tool toggles, escalation approval panel
 - **System tray icon** — always visible; toggle the settings UI on/off or quit from the tray without touching the terminal
@@ -31,7 +31,7 @@ Your emails are decrypted on your own machine by Proton Bridge. This server neve
 - **MCP Resources** — individual emails and folders addressable via `email://` and `folder://` URIs
 - **Scheduled email delivery** — queue emails for future sending, survives server restarts
 - **10-layer security model** — CSRF protection, origin validation, CRLF injection prevention, path traversal guards, rate limiting, audit log
-- **1,021 tests passing** — comprehensive unit coverage including all security validation paths
+- **1,026 tests passing** — comprehensive unit coverage including all security validation paths
 - **Zero `any` type annotations** in production TypeScript source
 
 ---
@@ -105,13 +105,14 @@ npx protonmail-agentic-mcp-settings
 # Then open http://localhost:8765
 ```
 
-The **5-step wizard** walks you through everything automatically:
+The **6-step wizard** walks you through everything automatically:
 
 1. **Welcome** — overview and prerequisites checklist
 2. **Bridge health check** — live TCP test to ports 1025 and 1143; blocks progress until Bridge is reachable
 3. **Credentials** — your ProtonMail address and Bridge password (found in Bridge app under Settings → IMAP/SMTP → Password — this is **not** your ProtonMail login password)
 4. **Permission preset** — choose what the AI is allowed to do (see table below)
-5. **Done** — displays the exact JSON snippet to paste into your Claude Desktop config
+5. **Review** — confirm your settings before saving
+6. **Done** — displays the exact JSON snippet to paste into your Claude Desktop config; optionally writes it for you automatically
 
 Settings are saved to `~/.protonmail-mcp.json` with mode `0600` (owner read/write only).
 
@@ -119,47 +120,41 @@ Settings are saved to `~/.protonmail-mcp.json` with mode `0600` (owner read/writ
 
 ## Claude Desktop Configuration
 
-Add this block to your Claude Desktop config file:
+**Use the settings wizard to get the correct snippet for your machine.** The final step of the wizard (or the Status tab → MCP Config Snippet) generates and copies the exact JSON to use — the path to the installed package differs per machine and OS, so a static snippet here would be wrong.
+
+The config file locations are:
 
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **Linux:** `~/.config/Claude/claude_desktop_config.json`
 
+The generated entry looks like this (your path will differ):
+
 ```json
 {
   "mcpServers": {
     "protonmail": {
-      "command": "npx",
-      "args": ["-y", "protonmail-agentic-mcp"],
-      "env": {
-        "PROTONMAIL_USERNAME": "you@proton.me",
-        "PROTONMAIL_PASSWORD": "your-bridge-password",
-        "PROTONMAIL_SMTP_HOST": "127.0.0.1",
-        "PROTONMAIL_SMTP_PORT": "1025",
-        "PROTONMAIL_IMAP_HOST": "127.0.0.1",
-        "PROTONMAIL_IMAP_PORT": "1143"
-      }
+      "command": "node",
+      "args": ["/path/to/node_modules/protonmail-agentic-mcp/dist/index.js"]
     }
   }
 }
 ```
 
-Restart Claude Desktop after saving. The setup wizard (step 5) generates this snippet with your email pre-filled.
+The wizard can also write this entry to your Claude Desktop config automatically — click **Write to Claude Desktop** on the Done step. Restart Claude Desktop after saving.
 
 ### Environment variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `PROTONMAIL_USERNAME` | Yes | — | Your ProtonMail email address |
-| `PROTONMAIL_PASSWORD` | Yes | — | Bridge password (from Bridge app, not your login password) |
-| `PROTONMAIL_SMTP_HOST` | No | `localhost` | SMTP host (use `127.0.0.1`) |
-| `PROTONMAIL_SMTP_PORT` | No | `1025` | SMTP port |
-| `PROTONMAIL_IMAP_HOST` | No | `localhost` | IMAP host (use `127.0.0.1`) |
-| `PROTONMAIL_IMAP_PORT` | No | `1143` | IMAP port |
-| `PROTONMAIL_BRIDGE_CERT` | No | — | Path to exported Bridge TLS `.crt` file |
-| `PROTONMAIL_SMTP_TOKEN` | No | — | SMTP token (direct `smtp.protonmail.ch`, paid plans only) |
-| `PROTONMAIL_MCP_CONFIG` | No | `~/.protonmail-mcp.json` | Override config file path |
-| `PROTONMAIL_SCHEDULER_STORE` | No | `~/.protonmail-mcp-scheduled.json` | Scheduled email persistence file |
+Configuration (credentials, SMTP/IMAP hosts, etc.) is stored in `~/.protonmail-mcp.json` and managed via the settings UI — not environment variables. The following env vars are available for advanced/optional overrides:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PROTONMAIL_MCP_CONFIG` | `~/.protonmail-mcp.json` | Override config file path |
+| `PROTONMAIL_SCHEDULER_STORE` | `~/.protonmail-mcp-scheduled.json` | Scheduled email persistence file |
+| `PROTONMAIL_LOG_FILE` | `~/.protonmail-mcp.log` | Override log file path |
+| `PROTONMAIL_MCP_PENDING` | `~/.protonmail-mcp.pending.json` | Override pending escalations file path |
+| `PROTONMAIL_MCP_AUDIT` | `~/.protonmail-mcp.audit.jsonl` | Override escalation audit log path |
+| `PORT` | `8765` | Override settings UI HTTP server port |
 
 ---
 
@@ -290,10 +285,11 @@ Pre-built prompt templates for common tasks:
 
 | Preset | What's allowed | Best for |
 |---|---|---|
-| **Read-Only** *(default)* | Read, search, analytics, connection status, Bridge start | Starting out; untrusted or new agents |
+| **Read-Only** *(default)* | Read, search, analytics, connection status, logs, Bridge start | Starting out; untrusted or new agents |
 | **Supervised** | All tools; deletion 5/hr, sending 20/hr, bulk actions 10/hr, server lifecycle 2/hr; read-heavy tools also rate-limited (`get_emails` 60/hr, `search_emails` 30/hr, `get_email_by_id` 200/hr) | Day-to-day agentic use |
-| **Send-Only** | Reading + sending + drafts + scheduling + Bridge start; no deletion, no folder writes, no server lifecycle | Agents that only need to compose and send |
+| **Send-Only** | Reading + sending + drafts + scheduling + `get_folders` + `get_connection_status` + `get_logs` + Bridge start; no deletion, no folder writes, no server lifecycle | Agents that only need to compose and send |
 | **Full Access** | All tools, no rate limits | Trusted workflows where you review actions |
+| **Custom** | User-defined per-tool toggles and rate limits (set via the Permissions tab) | Advanced: fine-grained control beyond the 4 presets |
 
 Change the preset at any time from the **Permissions** tab in the settings UI.
 
@@ -306,7 +302,7 @@ The escalation system lets an agent request broader permissions without permanen
 **How it works:**
 
 1. The agent calls `request_permission_escalation` with a reason and the target preset it needs.
-2. A challenge appears in the Settings UI under the **Escalations** tab and is also printed to the terminal.
+2. A challenge appears as a banner in the Settings UI (above the tabs) and is also printed to the terminal.
 3. You review the request, type `APPROVE` in the confirmation field, and click Approve (or Deny).
 4. The agent polls with `check_escalation_status` and proceeds once approved.
 5. After 5 minutes, permissions revert automatically.
@@ -328,22 +324,24 @@ The settings UI starts automatically on `http://localhost:8765` whenever Claude 
 To run the settings UI standalone (useful for initial setup before Claude Desktop is configured, or on headless/SSH systems):
 
 ```bash
-npx protonmail-agentic-mcp-settings
-# Opens http://localhost:8765
-
-# Custom port:
-npx protonmail-agentic-mcp-settings --port 9000
-
-# LAN mode (approve escalations from your phone):
-npx protonmail-agentic-mcp-settings --lan
+npx protonmail-agentic-mcp-settings           # auto-detects display; opens browser if available
+npx protonmail-agentic-mcp-settings --port 9000   # custom port (default: 8765)
+npx protonmail-agentic-mcp-settings --lan         # bind to 0.0.0.0 (approve from phone/other device)
+npx protonmail-agentic-mcp-settings --browser     # force browser UI even if no display detected
+npx protonmail-agentic-mcp-settings --tui         # force interactive terminal UI
+npx protonmail-agentic-mcp-settings --plain       # plain readline menus (no ANSI colors/escapes)
+npx protonmail-agentic-mcp-settings --no-open     # start server but don't auto-open browser
 ```
 
-Four tabs:
+The port can also be overridden with the `PORT` environment variable, or saved persistently via the settings UI itself.
+
+Three tabs:
 
 - **Setup** — credentials, SMTP/IMAP hosts and ports, Bridge TLS certificate, debug mode
 - **Permissions** — preset selector and per-tool enable/rate-limit toggles
-- **Escalations** — pending escalation requests from the AI agent (approve or deny here)
-- **Status** — server info, Claude Desktop config snippet, live connectivity check, audit log, config reset
+- **Status** — server info, Claude Desktop config snippet, live connectivity check, escalation audit log, config reset
+
+Pending escalation requests appear as a full-page banner above the tabs — no separate tab needed. A **Logs** tab also appears automatically when debug mode is enabled.
 
 Changes take effect in the running MCP server within 15 seconds — no restart required.
 
@@ -401,9 +399,9 @@ This server gives AI agents *controlled* access to sensitive email data. The sec
 ### "Certificate error" or TLS handshake failure
 
 - Export the Bridge TLS certificate: Bridge app → **Settings → Export TLS certificates**.
-- Set the path in the settings UI under **Setup → Bridge TLS Certificate**, or set `PROTONMAIL_BRIDGE_CERT`.
+- Set the path in the settings UI under **Setup → Bridge TLS Certificate**.
 
-> If `PROTONMAIL_BRIDGE_CERT` is not configured, TLS certificate validation is **disabled** for the localhost Bridge connection. The server logs an error and `get_connection_status` reports `insecureTls: true` for the affected service.
+> If no Bridge TLS certificate is configured, TLS certificate validation is **disabled** for the localhost Bridge connection. The server logs a warning and `get_connection_status` reports `insecureTls: true` for the affected service.
 
 ### Claude Desktop doesn't show ProtonMail tools
 
@@ -428,7 +426,7 @@ npm install
 
 npm run build          # compile TypeScript to dist/
 npm run dev            # watch mode (recompiles on save)
-npm run test           # run test suite (Vitest, 1,021 tests)
+npm run test           # run test suite (Vitest, 1,026 tests)
 npm run test:coverage  # coverage report
 npm run lint           # TypeScript type check (tsc --noEmit)
 npm run settings       # start standalone settings UI (after build)
@@ -440,6 +438,7 @@ npm run settings       # start standalone settings UI (after build)
 src/
   index.ts                    # Unified daemon: MCP server (51 tools, resources, prompts) + settings HTTP server + system tray
   settings-main.ts            # Standalone settings UI CLI (for headless/SSH environments)
+  tray.ts                     # System tray icon (systray2)
   config/
     schema.ts                 # Config types, tool names, category definitions
     loader.ts                 # Config file load/save, preset builder

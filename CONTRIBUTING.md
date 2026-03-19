@@ -25,16 +25,12 @@ Thank you for your interest in contributing to ProtonMail Agentic MCP! This docu
    npm install
    ```
 
-4. Create a `.env` file with your test credentials:
-   ```env
-   PROTONMAIL_USERNAME=your-test-email@protonmail.com
-   PROTONMAIL_PASSWORD=your-bridge-password
-   PROTONMAIL_SMTP_HOST=127.0.0.1
-   PROTONMAIL_SMTP_PORT=1025
-   PROTONMAIL_IMAP_HOST=127.0.0.1
-   PROTONMAIL_IMAP_PORT=1143
-   DEBUG=true
+4. Configure credentials via the settings UI:
+   ```bash
+   npm run build
+   npm run settings    # opens http://localhost:8765
    ```
+   Complete the setup wizard to save credentials to `~/.protonmail-mcp.json`. Alternatively, create that file directly with the required `connection` fields (see `src/config/schema.ts` for the shape).
 
 5. Build the project:
    ```bash
@@ -106,34 +102,42 @@ feat: add email filtering by date range
 
 ```
 src/
-├── index.ts                    # Main MCP server (48 tools, Resources, Prompts)
-├── settings-main.ts            # Settings UI entry point
+├── index.ts                    # Unified daemon: MCP server (51 tools, Resources, Prompts) + settings HTTP server + system tray
+├── settings-main.ts            # Standalone settings UI CLI entry point
+├── tray.ts                     # System tray icon (systray2)
 ├── config/
 │   ├── schema.ts               # Tool list, categories, permission types
-│   └── loader.ts               # Config load/save, preset builder
+│   └── loader.ts               # Config load/save, preset builder, keychain migration
 ├── permissions/
 │   ├── manager.ts              # Permission + rate-limit enforcement
-│   └── escalation.ts           # Human-gated escalation system
+│   └── escalation.ts           # Human-gated escalation challenge system
 ├── security/
-│   └── keychain.ts             # OS keychain integration (@napi-rs/keyring)
+│   ├── keychain.ts             # OS keychain integration (@napi-rs/keyring)
+│   └── memory.ts               # Credential wipe helpers
 ├── settings/
-│   ├── security.ts             # Rate limiting, CSRF, input sanitization
+│   ├── security.ts             # Rate limiting, CSRF, origin validation, TLS
 │   ├── server.ts               # Browser-based settings UI (localhost:8765)
 │   └── tui.ts                  # Terminal UI for settings
 ├── services/
-│   ├── smtp-service.ts         # SMTP email sending
-│   ├── simple-imap-service.ts  # IMAP email reading
+│   ├── smtp-service.ts         # SMTP email sending (Nodemailer)
+│   ├── simple-imap-service.ts  # IMAP email reading (ImapFlow)
 │   ├── scheduler.ts            # Scheduled email delivery
-│   └── analytics-service.ts    # Email analytics
+│   └── analytics-service.ts   # Email analytics computation
 ├── types/
-│   └── index.ts                # TypeScript type definitions
+│   └── index.ts                # Shared TypeScript types
 └── utils/
-    ├── logger.ts               # Logging utility
-    └── helpers.ts              # Helper functions
+    ├── helpers.ts              # ID generation, email validation, log sanitisation
+    ├── logger.ts               # Structured log store
+    └── tracer.ts               # Lightweight request tracing
 
 docs/
 ├── agentic-mcp-design-review.md
+├── proton-bridge-gaps.md
+├── proton-bridge-imap.md
+├── proton-bridge-overview.md
 ├── proton-bridge-security-model.md
+├── proton-bridge-smtp.md
+├── proton-bridge-tls.md
 └── smtp-imap-config-reference.md
 ```
 
@@ -207,7 +211,7 @@ When adding new features:
    - Add rate-limit overrides in `supervised` / `send_only` sections as appropriate
    - Verify the tool is correctly toggled by running `buildPermissions("read_only")` in a test
 6. Add tests
-7. Update README.md, README_FIRST_AI.md, and CONTRIBUTING.md tool counts
+7. Update README.md and CONTRIBUTING.md tool counts
 
 ### Adding a New Service
 
@@ -249,7 +253,7 @@ If you discover a security vulnerability:
 ### Security Best Practices
 
 - Never commit credentials or API keys
-- Use environment variables for sensitive data
+- Store credentials in `~/.protonmail-mcp.json` (mode 0600) or OS keychain — never in env vars or source code
 - Validate all user inputs
 - Handle errors securely
 - Follow principle of least privilege

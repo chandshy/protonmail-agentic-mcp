@@ -74,7 +74,7 @@ The server implements a 10-layer defense-in-depth security model:
 ### 10. Network Security
 - Settings UI binds to localhost only (127.0.0.1:8765)
 - Proton Bridge connections default to localhost
-- Self-signed certificate handling for Bridge TLS (configurable via PROTONMAIL_BRIDGE_CERT)
+- Self-signed certificate handling for Bridge TLS (configurable via the settings UI: Setup → Bridge TLS Certificate)
 
 ## Security Best Practices
 
@@ -82,7 +82,7 @@ When using this MCP server:
 
 ### Credential Management
 - **Never commit** credentials to version control
-- Use **environment variables** for sensitive data
+- Credentials are stored in `~/.protonmail-mcp.json` (mode 0600) or your OS keychain — never in environment variables or `.env` files
 - Use **Proton Bridge passwords**, not your main ProtonMail password
 - Rotate credentials regularly
 

@@ -57,7 +57,8 @@ cursor   string  Pass nextCursor from a previous response to get the next page.
 
 Returns `{ emails: [...], count, folder, nextCursor? }`. `nextCursor` is absent
 when there are no more pages. Email objects include `id`, `from`, `subject`,
-`date`, `isRead`, `isStarred`, `hasAttachment`, `bodyPreview` (first ~300 chars).
+`date`, `isRead`, `isStarred`, `hasAttachment`, `bodyPreview` (first ~300 chars),
+`isAnswered` (has been replied to), and `isForwarded` (has been forwarded).
 
 **Use `get_unread_count` first** to decide whether it's worth fetching at all.
 
@@ -68,7 +69,8 @@ Fetch a single email's full content including the complete body.
 emailId  string  IMAP UID from get_emails or search_emails.
 ```
 
-Returns the full email including `body`, `isHtml`, `cc`, and attachment
+Returns the full email including `body`, `isHtml`, `cc`, `isAnswered`
+(has been replied to), `isForwarded` (has been forwarded), and attachment
 metadata (filenames, MIME types, sizes — not binary content).
 
 #### `search_emails`
@@ -78,18 +80,28 @@ Search within one or more folders.
 folder        string   Default "INBOX". Ignored when `folders` is set.
 folders       string[] Search multiple folders. Use ["*"] to search all folders (capped at 20).
 from          string   Sender address or name fragment
-to            string   Recipient address
+to            string   Recipient (To field)
+bcc           string   BCC recipient
 subject       string   Subject text fragment
-hasAttachment boolean
+body          string   Search within email body content
+text          string   Full-text search across headers and body
+hasAttachment boolean  Filters locally (not server-side IMAP SEARCH)
 isRead        boolean
 isStarred     boolean
-dateFrom      string   ISO 8601 (e.g. "2024-01-01")
-dateTo        string   ISO 8601
+answered      boolean  Filter by whether email has been replied to
+isDraft       boolean  Filter by draft status
+dateFrom      string   ISO 8601 start date (INTERNALDATE — when received by server)
+dateTo        string   ISO 8601 end date (INTERNALDATE — when received by server)
+sentBefore    string   ISO 8601 datetime — filter by Date: header (when message was sent)
+sentSince     string   ISO 8601 datetime — filter by Date: header (when message was sent)
+larger        number   Minimum email size in bytes
+smaller       number   Maximum email size in bytes
 limit         number   1–200, default 50
 ```
 
-All fields are optional. The search queries IMAP directly via Proton Bridge,
-so results reflect the current state of the mailbox.
+All fields are optional. Most searches run server-side via IMAP SEARCH; `hasAttachment`
+filters locally after fetching. Use `dateFrom`/`dateTo` for received date,
+`sentBefore`/`sentSince` for the message's `Date:` header (sent date).
 
 **Multi-folder example:** Pass `folders: ["INBOX", "Sent"]` to find a message
 without knowing which folder it's in. Pass `folders: ["*"]` to search
@@ -316,6 +328,12 @@ emailId       string
 targetFolder  string  Full IMAP path, e.g. "Archive", "Folders/Work"
 ```
 
+#### `archive_email`
+Move an email to the Archive folder.
+```
+emailId  string
+```
+
 #### `move_to_trash`
 Move an email to the Trash folder.
 ```
@@ -412,6 +430,12 @@ newName  string
 System folders (`INBOX`, `Sent`, `Drafts`, `Trash`, `Spam`, `Archive`)
 cannot be renamed.
 
+#### `delete_folder`
+Delete a folder. The folder must be empty before it can be deleted.
+```
+folderName  string
+```
+
 #### `sync_folders`
 Refresh the folder list from IMAP. Returns `{ success, folderCount }`.
 
@@ -424,12 +448,6 @@ Refresh the folder list from IMAP. Returns `{ success, folderCount }`.
 #### `delete_email`
 ```
 emailId  string
-```
-
-#### `delete_folder`
-The folder must be empty before it can be deleted.
-```
-folderName  string
 ```
 
 #### `bulk_delete_emails`

@@ -10,9 +10,9 @@ The MCP protocol has four first-class primitives. This server uses **three of fo
 
 | Primitive | Control | Purpose | This server |
 |---|---|---|---|
-| **Tools** | Model-controlled | Actions & queries | ✅ 46 tools (+ 2 always-available escalation meta-tools) with structured output, annotations, and permission gating |
+| **Tools** | Model-controlled | Actions & queries | ✅ 49 tools (+ 2 always-available escalation meta-tools) with structured output, annotations, and permission gating |
 | **Resources** | App-driven | Addressable data via URI | ✅ `email://` and `folder://` URI schemes |
-| **Prompts** | User-controlled | Workflow templates / slash commands | ✅ 3 prompts (compose_reply, thread_summary, find_subscriptions) |
+| **Prompts** | User-controlled | Workflow templates / slash commands | ✅ 5 prompts (triage_inbox, compose_reply, daily_briefing, find_subscriptions, thread_summary) |
 | **Sampling** | Server-initiated | Server requests LLM completions | ❌ Not implemented (low priority — no current use case) |
 
 ### Additional protocol features implemented:
@@ -48,7 +48,7 @@ MCP server reloads every 15s → takes effect immediately
 | **Read-Only** | Reading, analytics, system tools only | Safe default — no writes |
 | **Supervised** | All tools; deletion ≤5/hr, sending ≤20/hr | Day-to-day agent use |
 | **Send-Only** | Reading + sending only | Drafting and sending without destructive access |
-| **Full Access** | All 46 tools, no rate limits | Trusted workflows with full autonomy |
+| **Full Access** | All 49 tools, no rate limits | Trusted workflows with full autonomy |
 
 ### Security Layers (10 total)
 1. Permission gate — every tool checked against config (15s refresh)
