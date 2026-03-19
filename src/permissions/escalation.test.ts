@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
@@ -239,6 +239,35 @@ describe('escalation workflow', () => {
     expect(second.ok).toBe(false);
     if (second.ok) throw new Error('unexpected');
     expect(second.error).toContain('already');
+  });
+
+  it('approveEscalation() returns "Challenge has expired." for the TOCTOU race where entry slips past eviction but is past expiresAt', () => {
+    const req = requestEscalation('supervised', 'read_only', 'Race condition expiry test');
+    if (!req.ok) throw new Error('request failed');
+
+    // Set expiresAt to a fixed point in time T
+    const { readFileSync, writeFileSync } = require('fs');
+    const fileData = JSON.parse(readFileSync(pendingPath, 'utf-8'));
+    const T = Date.now() + 60_000; // 60 s from now
+    fileData.escalations[0].expiresAt = new Date(T).toISOString();
+    writeFileSync(pendingPath, JSON.stringify(fileData), 'utf-8');
+
+    // Mock Date.now so the first call (inside evictExpired) returns T-1 (not expired yet),
+    // and the second call (line 394 in approveEscalation) returns T+1 (now expired).
+    let callCount = 0;
+    vi.spyOn(Date, 'now').mockImplementation(() => {
+      callCount++;
+      return callCount === 1 ? T - 1 : T + 1;
+    });
+
+    try {
+      const result = approveEscalation(req.id, 'browser_ui');
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('unexpected');
+      expect(result.error).toBe('Challenge has expired.');
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   // ── denyEscalation ────────────────────────────────────────────────────────

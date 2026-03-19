@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { join } from "path";
 import { homedir } from "os";
-import { buildPermissions, defaultConfig, getConfigPath, configExists, loadConfig, saveConfig } from "./loader.js";
+import { buildPermissions, defaultConfig, getConfigPath, configExists, loadConfig, saveConfig, loadCredentialsFromKeychain, saveConfigWithCredentials, migrateCredentials } from "./loader.js";
 import { ALL_TOOLS, TOOL_CATEGORIES, DEFAULT_RESPONSE_LIMITS } from "./schema.js";
 
 // ─── fs mocking for loadConfig / saveConfig / configExists ─────────────────────
@@ -16,6 +16,16 @@ vi.mock("fs", async (importOriginal) => {
     appendFile: vi.fn((_path: string, _data: string, _enc: string, cb: () => void) => cb()),
   };
 });
+
+// ─── keychain mocking ──────────────────────────────────────────────────────────
+vi.mock("../security/keychain.js", () => ({
+  isKeychainAvailable: vi.fn(),
+  loadCredentials: vi.fn(),
+  saveCredentials: vi.fn(),
+  migrateFromConfig: vi.fn(),
+}));
+
+import { loadCredentials as mockLoadKeychainCredentials, saveCredentials as mockSaveKeychainCredentials, migrateFromConfig as mockMigrateFromConfig } from "../security/keychain.js";
 
 // Import mocked fs functions for use in tests
 import { existsSync, readFileSync, writeFileSync, renameSync } from "fs";
@@ -357,5 +367,113 @@ describe("saveConfig", () => {
     const [, payload] = mockedWriteFileSync.mock.calls[0] as [string, string];
     const parsed = JSON.parse(payload);
     expect(parsed.connection.username).toBe("testuser");
+  });
+});
+
+// ─── loadCredentialsFromKeychain ───────────────────────────────────────────────
+
+describe("loadCredentialsFromKeychain", () => {
+  const mockedLoad = vi.mocked(mockLoadKeychainCredentials);
+  const mockedExistsSync = vi.mocked(existsSync);
+  const mockedReadFileSync = vi.mocked(readFileSync);
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns keychain credentials when keychain has password", async () => {
+    mockedLoad.mockResolvedValue({ password: "kc-pass", smtpToken: "kc-token" });
+    const result = await loadCredentialsFromKeychain();
+    expect(result).toEqual({ password: "kc-pass", smtpToken: "kc-token", storage: "keychain" });
+  });
+
+  it("falls back to config file when keychain returns empty credentials", async () => {
+    mockedLoad.mockResolvedValue({ password: "", smtpToken: "" });
+    mockedExistsSync.mockReturnValue(true);
+    const cfgJson = JSON.stringify({
+      configVersion: 1,
+      connection: { smtpHost: "localhost", smtpPort: 1025, imapHost: "localhost", imapPort: 1143, username: "u", password: "cfg-pass", smtpToken: "cfg-token", bridgeCertPath: "", debug: false },
+      permissions: { preset: "full", tools: {} },
+    });
+    mockedReadFileSync.mockReturnValue(cfgJson as unknown as Buffer);
+    const result = await loadCredentialsFromKeychain();
+    expect(result).toEqual({ password: "cfg-pass", smtpToken: "cfg-token", storage: "config" });
+  });
+
+  it("returns null when both keychain and config have no credentials", async () => {
+    mockedLoad.mockResolvedValue({ password: "", smtpToken: "" });
+    mockedExistsSync.mockReturnValue(false);
+    const result = await loadCredentialsFromKeychain();
+    expect(result).toBeNull();
+  });
+});
+
+// ─── saveConfigWithCredentials ─────────────────────────────────────────────────
+
+describe("saveConfigWithCredentials", () => {
+  const mockedSave = vi.mocked(mockSaveKeychainCredentials);
+  const mockedWriteFileSync = vi.mocked(writeFileSync);
+  const mockedRenameSync = vi.mocked(renameSync);
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("stores credentials in keychain and blanks them in config file when keychain succeeds", async () => {
+    mockedSave.mockResolvedValue(true);
+    const cfg = defaultConfig();
+    cfg.connection.password = "secret";
+    cfg.connection.smtpToken = "token";
+    const result = await saveConfigWithCredentials(cfg);
+    expect(result).toBe("keychain");
+    expect(cfg.connection.password).toBe("");
+    expect(cfg.connection.smtpToken).toBe("");
+    expect(cfg.credentialStorage).toBe("keychain");
+    expect(mockedWriteFileSync).toHaveBeenCalledTimes(1);
+    expect(mockedRenameSync).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to config file when keychain save fails", async () => {
+    mockedSave.mockResolvedValue(false);
+    const cfg = defaultConfig();
+    cfg.connection.password = "secret";
+    const result = await saveConfigWithCredentials(cfg);
+    expect(result).toBe("config");
+    expect(cfg.credentialStorage).toBe("config");
+    expect(mockedWriteFileSync).toHaveBeenCalledTimes(1);
+    expect(mockedRenameSync).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ─── migrateCredentials ────────────────────────────────────────────────────────
+
+describe("migrateCredentials", () => {
+  const mockedMigrate = vi.mocked(mockMigrateFromConfig);
+  const mockedExistsSync = vi.mocked(existsSync);
+  const mockedReadFileSync = vi.mocked(readFileSync);
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns false when no config file exists", async () => {
+    mockedExistsSync.mockReturnValue(false);
+    const result = await migrateCredentials();
+    expect(result).toBe(false);
+    expect(mockedMigrate).not.toHaveBeenCalled();
+  });
+
+  it("calls migrateFromConfig and returns its result when config file exists", async () => {
+    mockedExistsSync.mockReturnValue(true);
+    const cfgJson = JSON.stringify({
+      configVersion: 1,
+      connection: { smtpHost: "localhost", smtpPort: 1025, imapHost: "localhost", imapPort: 1143, username: "u", password: "p", smtpToken: "", bridgeCertPath: "", debug: false },
+      permissions: { preset: "full", tools: {} },
+    });
+    mockedReadFileSync.mockReturnValue(cfgJson as unknown as Buffer);
+    mockedMigrate.mockResolvedValue(true);
+    const result = await migrateCredentials();
+    expect(result).toBe(true);
+    expect(mockedMigrate).toHaveBeenCalledTimes(1);
   });
 });
